@@ -113,7 +113,7 @@ if __name__ == "__main__":
             elif main_action == '3':
                 # Get image object to remove
                 image = ImageManager.get_created_image(ImageManager.cli_select_created_image())
-                printc('\n⚠ Would you realy delete image \'' + image.name + '\' definitively (yes/no) ?', Color.RED)
+                printc('\n⚠ Remove image \'' + image.name + '\'. Are you sure (yes/no) ?', Color.RED)
 
                 # get confirmation from user
                 confirmation = input('-->: ').replace(" ", "")
@@ -157,7 +157,7 @@ if __name__ == "__main__":
                 # If there is image, select the image
                 image_name = select_from_list(image_names)
 
-                printc('\n⚠ Would you realy clean image \'' + image_name + '\' definitively (yes/no) ?', Color.RED)
+                printc('\n⚠ Clear image \'' + image_name + '\'. Are you sure (yes/no) ?', Color.RED)
 
                 # get confirmation from user
                 confirmation = input('-->: ').replace(" ", "")
