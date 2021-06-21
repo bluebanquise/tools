@@ -2,4 +2,4 @@
 
 ## 1.0.0 - Next-release
 
-  - change (#PR NUMBER)
+  - Also update initramfs when updating image kernel (#2)
