@@ -77,6 +77,8 @@ class KernelManager:
 
         # Use image method to set kernel
         image.kernel = kernel
+        # Update initramfs for selected kernel
+        image.image = 'initramfs-kernel-' + kernel.replace('vmlinuz-', '')
         # Register image with new kernel
         image.register_image()
 
