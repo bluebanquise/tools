@@ -2,4 +2,4 @@
 
 ## 1.0.0 - Next-release
 
-  - Also update initramfs when updating image kernel (#2)
+  - Also update initramfs and regenerate boot.ipxe when updating image kernel (#2)
