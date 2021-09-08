@@ -10,6 +10,8 @@ Packager: Benoit Leveugle <benoit.leveugle@gmail.com>
 
 %define debug_package %{nil}
 
+Requires: python3-clustershell
+
 %description
 Set of filters for the BlueBanquise stack
 
@@ -20,7 +22,7 @@ Set of filters for the BlueBanquise stack
 %build
 
 %install
-mkdir -p $RPM_BUILD_ROOT/usr/share/ansible/plugins/filter/nodeset.py
+mkdir -p $RPM_BUILD_ROOT/usr/share/ansible/plugins/filter/
 cp nodeset.py $RPM_BUILD_ROOT/usr/share/ansible/plugins/filter/nodeset.py
 
 %files
