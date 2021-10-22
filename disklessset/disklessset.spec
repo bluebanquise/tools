@@ -35,7 +35,7 @@ cp -R diskless $RPM_BUILD_ROOT/%{python3_sitelib}/
 mv $RPM_BUILD_ROOT/%{python3_sitelib}/diskless/*_module.py $RPM_BUILD_ROOT/%{python3_sitelib}/diskless/modules
 
 mkdir -p $RPM_BUILD_ROOT/usr/bin/
-cp disklessset $RPM_BUILD_ROOT/usr/bin/disklessset
+cp disklessset.py $RPM_BUILD_ROOT/usr/bin/disklessset
 
 # create /etc/disklessset/diskless_parameters.yml with default values
 mkdir -p $RPM_BUILD_ROOT/etc/disklessset
