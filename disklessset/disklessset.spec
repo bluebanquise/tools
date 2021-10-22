@@ -47,6 +47,8 @@ EOF
 # create empty /var/lib/diskless/installations.yml
 mkdir -p $RPM_BUILD_ROOT/var/lib/diskless
 touch $RPM_BUILD_ROOT/var/lib/diskless/installations.yml
+# Add dictionary format to the file
+echo "{}" > $RPM_BUILD_ROOT/var/lib/diskless/installations.yml
 
 # Create base directories for images
 mkdir -p $RPM_BUILD_ROOT/var/www/html/preboot_execution_environment/diskless/{images,kernels}
