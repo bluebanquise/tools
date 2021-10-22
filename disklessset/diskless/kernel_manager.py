@@ -9,6 +9,7 @@
 #    This module allow to manage kernels globaly. It
 #    allow to make basic actions on kernels.
 #
+# 1.3.0: Role update. David Pieters <davidpieters22@gmail.com>
 # 1.2.0: Role update. David Pieters <davidpieters22@gmail.com>, Benoit Leveugle <benoit.leveugle@gmail.com>
 # 1.1.0: Role update. Benoit Leveugle <benoit.leveugle@gmail.com>, Bruno Travouillon <devel@travouillon.fr>
 # 1.0.0: Role creation. Benoit Leveugle <benoit.leveugle@gmail.com>
@@ -19,7 +20,7 @@
 # Import basic modules
 import os
 import logging
-from diskless.utils import Color, printc, select_from_list
+from diskless.utils import Color, inform, ask, ok, select_from_list
 from diskless.image_manager import ImageManager
 
 
@@ -77,12 +78,10 @@ class KernelManager:
 
         # Use image method to set kernel
         image.kernel = kernel
-        # Update initramfs for selected kernel
-        image.image = 'initramfs-kernel-' + kernel.replace('vmlinuz-', '')
-        # Regenarate ipxe boot for the image
-        image.generate_ipxe_boot_file()
-        # Register image with new kernel
+        # Change the kernel in the image_data file
         image.register_image()
+        # Change the kernel in the boot.ipxe file
+        image.generate_ipxe_boot_file()
 
     # Generate initramfs from kernel
     @staticmethod
@@ -98,7 +97,7 @@ class KernelManager:
         kernel_version = kernel.replace('vmlinuz-', '')
         generation_path = KernelManager.KERNELS_PATH + '/initramfs-kernel-' + kernel_version
 
-        printc('[INFO] Now generating initramfs... May take some time', Color.BLUE)
+        inform('Now generating initramfs... May take some time')
 
         # Generate the new initramfs file with dracut command on the kernel
         logging.info('Executing \'dracut --xz -v -m "network base nfs" --add "ifcfg livenet systemd systemd-initrd dracut-systemd" --add-drivers xfs --no-hostonly --nolvmconf --force ' + generation_path + ' --kver ' + kernel_version + '\'')
@@ -124,7 +123,7 @@ class KernelManager:
         kernels_list = KernelManager.get_kernels()
         # If there are available kernels
         if kernels_list:
-            print('Select the kernel:')
+            ask('Select the kernel:')
             # return selected kernel
             return select_from_list(kernels_list)
         else:
@@ -158,10 +157,12 @@ class KernelManager:
                 # If it is not the last kernel of the list
                 else:
                     print("    ├── "+str(kernel)+' - ' + initramfs_status)
+            ok()
 
         # If the list of kernels is empty
         else:
-            raise UserWarning('No kernels found in /var/www/html/preboot_execution_environment/diskless/kernels/\nPlease refer to readme.rst for details on how to obtain kernels.')
+            inform('No kernels found in /var/www/html/preboot_execution_environment/diskless/kernels/', 'Please refer to readme.rst for details on how to obtain kernels.')
+            return
 
     @staticmethod
     def cli_change_kernel():
@@ -171,6 +172,9 @@ class KernelManager:
         """
         # Get all images
         images_list = ImageManager.get_created_images()
+        if not images_list:
+            inform('No images.')
+            return
 
         # Select only images with kernel attribut
         images_with_kernel = []
@@ -180,7 +184,8 @@ class KernelManager:
 
         # If there is no image with kernel, raise an exception
         if not images_with_kernel:
-            raise UserWarning('Not any image with a kernel')
+            inform('Not any image with a kernel')
+            return
 
         # Select the image to change kernel
         image_name = select_from_list(images_with_kernel)
@@ -192,3 +197,9 @@ class KernelManager:
 
         # Set image kernel by using image method
         KernelManager.change_kernel(image, new_kernel)
+        ok()
+
+    def cli_generate_initramfs():
+        selected_kernel = KernelManager.cli_select_kernel()
+        KernelManager.generate_initramfs(selected_kernel)
+        ok()

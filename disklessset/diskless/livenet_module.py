@@ -10,6 +10,7 @@
 #    images. This type of image allow to load operating system
 #    in ram.
 #
+# 1.3.0: Role update. David Pieters <davidpieters22@gmail.com>
 # 1.2.0: Role update. David Pieters <davidpieters22@gmail.com>, Benoit Leveugle <benoit.leveugle@gmail.com>
 # 1.1.0: Role update. Benoit Leveugle <benoit.leveugle@gmail.com>, Bruno Travouillon <devel@travouillon.fr>
 # 1.0.0: Role creation. Benoit Leveugle <benoit.leveugle@gmail.com>
@@ -22,15 +23,16 @@ import os
 import shutil
 import crypt
 import logging
+import re
 from datetime import datetime
 from enum import Enum, auto
-from subprocess import check_call
+from subprocess import check_call, check_output, CalledProcessError
 
 # Import diskless modules
 from diskless.modules.base_module import Image
 from diskless.kernel_manager import KernelManager
 from diskless.image_manager import ImageManager
-from diskless.utils import Color, printc, select_from_list
+from diskless.utils import Color, printc, select_from_list, inform, warn, ok, ask_module
 
 
 # Class representing a livenet image
@@ -57,39 +59,49 @@ class LivenetImage(Image):
     def create_new_image(self, password, kernel, livenet_type, livenet_size, additional_packages, ssh_pub_key, selinux, release_version, optimize):
         super().create_new_image()
 
-        # Checking all parameters
-        # Check name format
+        # Checking all parameters compliance
         if not isinstance(password, str) or len(password.split()) > 1:
-            raise ValueError('Unexpected password format.')
-
-        # Check kernel attribute
-        if kernel not in KernelManager.get_available_kernels():
-            raise ValueError('Invalid kernel.')
-
-        # Check livenet type
-        if livenet_type is not LivenetImage.Type.STANDARD and livenet_type is not LivenetImage.Type.SMALL and livenet_type is not LivenetImage.Type.CORE:
-            raise ValueError('Invalid livenet type.')
-
-        # Check livenet size
-        if not isinstance(livenet_size, str) or int(livenet_size) < LivenetImage.MIN_LIVENET_SIZE or int(livenet_size) > LivenetImage.MAX_LIVENET_SIZE:
-            raise ValueError('Invalid livenet size')
-
-        # Set image attributes before creation
-        self.kernel = kernel
-        self.image = 'initramfs-kernel-' + self.kernel.replace('vmlinuz-', '')
+            raise ValueError('Invalid password format parameter value')
         self.password = password
 
+        if kernel not in KernelManager.get_available_kernels():
+            raise ValueError('Invalid kernel parameter value')
+        self.kernel = kernel
+        self.image = 'initramfs-kernel-' + self.kernel.replace('vmlinuz-', '')
+
+        if livenet_type is not LivenetImage.Type.STANDARD and livenet_type is not LivenetImage.Type.SMALL and livenet_type is not LivenetImage.Type.CORE:
+            raise ValueError('Invalid livenet type parameter value')
         self.livenet_type = livenet_type
+
+        if not isinstance(livenet_size, str) or int(livenet_size) < LivenetImage.MIN_LIVENET_SIZE or int(livenet_size) > LivenetImage.MAX_LIVENET_SIZE:
+            raise ValueError('Invalid livenet size parameter value')
         self.livenet_size = livenet_size
 
+        if selinux not in {True, False}:
+            raise ValueError('Invalid selinux parameter value')
         self.selinux = selinux
 
+        if optimize not in {True, False}:
+            raise ValueError('Invalid optimize parameter value')
         self.optimize = optimize
 
         if ssh_pub_key is not None:
-            self.ssh_pub_key = ssh_pub_key
+            if not os.path.isfile(ssh_pub_key):
+                raise ValueError('Invalid ssh_pub_key parameter value')
+            else:
+                self.ssh_pub_key = ssh_pub_key
 
         if additional_packages is not None:
+            for package_name in additional_packages:
+                try:
+                    # Check packages availability
+                    logging.debug('Executing \'subprocess.check_output(\'dnf list \'' + package_name + ' | grep ' + package_name + ', shell=True)\'')
+                    check_output('dnf list ' + package_name + ' | grep ' + package_name, shell=True)
+
+                # If there is not running process for image creator instance pid
+                except CalledProcessError:
+                    raise ValueError('Invalid additional_packages parameter value')
+
             self.additional_packages = additional_packages
 
         if release_version is not None:
@@ -98,7 +110,6 @@ class LivenetImage(Image):
         # A livenet can be mounted on it's personnal mount directory
         # in order to perform actions on it.
         self.is_mounted = False
-
         # Set up working and mount image directories
         self.WORKING_DIRECTORY = self.WORKING_DIRECTORY + self.name + '/'
         self.MOUNT_DIRECTORY = self.WORKING_DIRECTORY + 'mnt/'
@@ -157,8 +168,8 @@ class LivenetImage(Image):
 
         # Get appropriate packages for desired image file system
         if self.livenet_type == LivenetImage.Type.STANDARD:
-            logging.debug('Standard image requested. Adding "@core kernel-modules" to packages list')
-            dnf_packages = '@core kernel-modules'
+            logging.debug('Standard image requested. Adding "@core" to packages list')
+            dnf_packages = '@core'
 
         elif self.livenet_type == LivenetImage.Type.SMALL:
             logging.debug('Small image requested. Adding "dnf yum iproute procps-ng openssh-server NetworkManager" to packages list')
@@ -219,8 +230,8 @@ class LivenetImage(Image):
         os.system('mount -o loop ' + self.IMAGE_DIRECTORY + 'tosquash/LiveOS/rootfs.img ' + self.MOUNT_DIRECTORY)
 
         # Put the operating system inside rootfs.img
-        logging.debug('Executing \'cp -a ' + self.WORKING_DIRECTORY + 'generated_os/. ' + self.MOUNT_DIRECTORY + '\'')
-        os.system('cp -a ' + self.WORKING_DIRECTORY + 'generated_os/. ' + self.MOUNT_DIRECTORY)
+        logging.debug('Executing \'cp -a ' + self.WORKING_DIRECTORY + 'generated_os/* ' + self.MOUNT_DIRECTORY + '\'')
+        os.system('cp -a ' + self.WORKING_DIRECTORY + 'generated_os/* ' + self.MOUNT_DIRECTORY)
 
         # Unmount rootfs.img file
         logging.debug('Executing \'umount ' + self.MOUNT_DIRECTORY + '\'')
@@ -339,6 +350,44 @@ class LivenetImage(Image):
             self.unmount()
 
         super().remove_files()
+
+    # Clone the image into another image
+    def clone(self, clone_name):
+
+        super().clone(clone_name)
+
+        was_mounted = False
+        # If the livenet image is currently mounted
+        if self.is_mounted is True:
+            was_mounted = True
+            # Unmount it before cloning it's files
+            self.unmount()
+
+        # Clone directory path
+        CLONE_IMAGE_DIRECTORY = Image.IMAGES_DIRECTORY + clone_name + '/'
+
+        # Copying image directory for the clone
+        logging.debug('Copying directory ' + self.IMAGE_DIRECTORY + ' into ' + CLONE_IMAGE_DIRECTORY)
+        logging.debug('Executing \'cp -r ' + self.IMAGE_DIRECTORY + ' ' + CLONE_IMAGE_DIRECTORY + '\'')
+        shutil.copytree(self.IMAGE_DIRECTORY, CLONE_IMAGE_DIRECTORY)
+
+        # Create a clone object
+        clone = LivenetImage(clone_name)
+
+        # Change the clone attribute values
+        clone.name = clone_name
+        clone.IMAGE_DIRECTORY = CLONE_IMAGE_DIRECTORY
+        clone.WORKING_DIRECTORY = LivenetImage.WORKING_DIRECTORY + clone.name + '/'
+        clone.MOUNT_DIRECTORY = LivenetImage.WORKING_DIRECTORY + clone.name + '/mnt/'
+
+        # Register the clone to update it's image_data file values
+        clone.register_image()
+
+        # Update the boot.ipxe file content
+        clone.generate_ipxe_boot_file()
+
+        if was_mounted is True:
+            self.mount()
 
     # Mount the image to edit it
     def mount(self):
@@ -559,6 +608,54 @@ class LivenetImage(Image):
             logging.debug('Executing \'rm -rf ' + IMAGES_DIRECTORY + '\'')
             shutil.rmtree(IMAGES_DIRECTORY)
 
+    # Get the parameters from a dictionary
+    @classmethod
+    def create_image_from_parameters(cls, image_dict):
+        super().create_image_from_parameters()
+
+        # Check that there are all mandatory the parameters
+        if not all(key in image_dict for key in ['name', 'password', 'kernel', 'livenet_type', 'livenet_size', 'optimize', 'selinux']):
+            raise ValueError('Invalid set of parameters')
+
+        # Getting attributes from the dictionary
+        name = str(image_dict['name'])
+        password = str(image_dict['password'])
+        kernel = image_dict['kernel']
+
+        if image_dict['livenet_type'] == 'Type.STANDARD':
+            livenet_type = LivenetImage.Type.STANDARD
+        elif image_dict['livenet_type'] == 'Type.SMALL':
+            livenet_type = LivenetImage.Type.SMALL
+        else:
+            livenet_type = LivenetImage.Type.CORE
+
+        livenet_size = str(image_dict['livenet_size'])
+        optimize = image_dict['optimize']
+
+        selinux = image_dict['selinux']
+        if selinux == 'True':
+            selinux = True
+        elif selinux == 'False':
+            selinux = False
+
+        if 'ssh_pub_key' in image_dict:
+            ssh_pub_key = str(image_dict['ssh_pub_key'])
+        else:
+            ssh_pub_key = None
+
+        if 'additional_packages' in image_dict:
+            additional_packages = image_dict['additional_packages']
+        else:
+            additional_packages = None
+
+        if 'release_version' in image_dict:
+            release_version = str(image_dict['release_version'])
+        else:
+            release_version = None
+
+        # Create the new image with the parameters
+        cli_construct_livenet_image(name, password, kernel, livenet_type, livenet_size, additional_packages, ssh_pub_key, selinux, release_version, optimize)
+
     @staticmethod
     def get_boot_file_template():
         """Get the class boot file template.
@@ -640,187 +737,201 @@ boot
 
 def cli_menu():
     # Display main livenet menu
-    printc('\n == Livenet image module == \n', Color.GREEN)
+    printc('\n == Livenet image module == ', Color.GREEN)
 
-    print(' 1 - Generate a new livenet image')
-    print(' 2 - Mount an existing livenet image')
-    print(' 3 - Unount an existing livenet image')
-    print(' 4 - Resize livenet image')
+    ask_module('Select an action:')
+    action_list = ['Generate a new livenet image', 'Mount an existing livenet image', 'Unount an existing livenet image', 'Resize livenet image']
 
-    # Answer and get the action to execute
-    print('\n Select an action')
-    main_action = input('-->: ')
-    print('')
+    while True:
+        action = select_from_list(action_list)
 
-    # List available kernels
-    if main_action == '1':
-        cli_create_livenet_image()
-    elif main_action == '2':
-        cli_mount_livenet_image()
-    elif main_action == '3':
-        cli_unmount_livenet_image()
-    elif main_action == '4':
-        cli_resize_livenet_image()
+        try:
+            # List available kernels
+            if action == 'Generate a new livenet image':
+                cli_create_livenet_image_questions()
+            elif action == 'Mount an existing livenet image':
+                cli_mount_livenet_image()
+            elif action == 'Unount an existing livenet image':
+                cli_unmount_livenet_image()
+            else:
+                cli_resize_livenet_image()
+            break
 
-    # Bad entry
-    else:
-        raise UserWarning('\'' + main_action + '\' is not a valid entry. Please enter another value.')
+        # Catch the error in order to stay in this menu if an error appends
+        except UserWarning as e:
+            inform(str(e))
+
 
 # Get a size from the user and check the compliance
-
-
 def cli_get_size(size):
 
-    # Check if there is the size unit
+    # Check the size variable format with a regex:
+    #   Must start with (1-9)
+    #   IF end by one G: Can be followed by one or more (0-9)
+    #   IF end by one M: Can be followed by one or more (0-9), maybe one '.' after, maybe one to three (0-9) after the '.'
+    compliant = re.findall("(^([1-9]{1})([0-9]*)((['.']{0,1})([0-9]{0,3})([G])$))|(^([1-9]{1})([0-9]*)([M])$)", size)
+    if not compliant:
+        raise UserWarning('Not a valid size unit format!')
+
+    # Get the unit
     unit = size[-1]
 
-    if unit != 'G' and unit != 'M':
-        raise UserWarning('\nNot a valid size unit format!')
-
-    # Delete unit from size
+    # Get the size by removing the unit from the string
     size = size[:-1]
 
     # If the user has entered a Giga value
     if unit == 'G':
         # If the giga value has a dot separator
         if '.' in size:
-            size_array = size.split(".")
-            if len(size_array) != 2 or not size_array[0].isdigit() or not size_array[1].isdigit() or len(size_array[1]) > 3:
-                raise UserWarning('\nNot a valid size format!')
-
             size = str(int(float(size)*1024))
 
         # If the giga value has no dot separator
         else:
-            if not size.isdigit():
-                raise UserWarning('\nNot a valid size format!')
-            size = str(int(size) * 1024)
-
-    elif unit == 'M':
-        # Check if the size is only numerical
-        if not size.isdigit():
-            raise UserWarning('\nNot a valid size format!')
+            size = str(int(size)*1024)
 
     return size
 
 
-def cli_create_livenet_image():
+def cli_create_livenet_image_questions():
+    """Get all the image building arguments from the user shell."""
 
     # Get available kernels
     kernel_list = KernelManager.get_available_kernels()
 
     # If there are no kernels aise an exception
     if not kernel_list:
-        raise UserWarning('No kernel available')
+        raise UserWarning('No kernel available.')
 
-    # Condition to test if image name is compliant
+    # Give a name to the image to create
+    ask_module('Give a name for your image')
     while True:
 
-        printc('[+] Give a name for your image', Color.GREEN)
         # Get new image name
         selected_image_name = input('-->: ').replace(" ", "")
 
+        # Check that the name is not empty
         if selected_image_name == '':
-            raise UserWarning('Image name cannot be empty !')
+            inform('Image name cannot be empty !')
 
-        if not ImageManager.is_image(selected_image_name):
+        # Check that the image name is not already taken
+        elif ImageManager.is_image(selected_image_name):
+            inform('Image \'' + selected_image_name + '\' already exists, use another image name.')
+
+        else:
             break
 
-        # Else
-        print('Image ' + selected_image_name + ' already exist, use another image name.')
-
     # Select the kernel to use
-    printc('\n[+] Select your kernel:', Color.GREEN)
+    ask_module('Select your kernel:')
     selected_kernel = select_from_list(kernel_list)
 
     # Manage password
-    printc('\n[+] Give a password for your image', Color.GREEN)
+    ask_module('Give a password for your image')
     selected_password = input('Enter clear root password of the new image: ').replace(" ", "")
 
     # Select livenet type
-    types_list = ['Standard: core and kernel-modules (~1.3Gb)', 'Small: openssh, dnf and NetworkManager (~300Mb)', 'Minimal: openssh only (~270Mb)']
+    ask_module('Choose your image type:')
+    types_list = ['Standard: core (~1.3Gb)', 'Small: openssh, dnf and NetworkManager (~700Mb)', 'Minimal: openssh only (~680Mb)']
     get_type = select_from_list(types_list)
 
-    if get_type == 'Standard: core and kernel-modules (~1.3Gb)':
+    if get_type == 'Standard: core (~1.3Gb)':
         selected_type = LivenetImage.Type.STANDARD
-    elif get_type == 'Small: openssh, dnf and NetworkManager (~300Mb)':
+    elif get_type == 'Small: openssh, dnf and NetworkManager (~700Mb)':
         selected_type = LivenetImage.Type.SMALL
-    elif get_type == 'Minimal: openssh only (~270Mb)':
-        selected_type = LivenetImage.Type.CORE
     else:
-        raise UserWarning('Not a valid choice !')
+        selected_type = LivenetImage.Type.CORE
 
     # Select livenet size
-    printc('\nPlease choose image size:\n(supported units: M=1024*1024, G=1024*1024*1024)\n(Examples: 5120M or 5G)', Color.GREEN)
-    selected_size = input('-->: ')
+    ask_module('Please choose image size:', '(supported units: M=1024*1024, G=1024*1024*1024)', '(Examples: 700M or 5G)')
+    while True:
+        selected_size = input('-->: ')
 
-    # Check and convert the size
-    image_size = cli_get_size(selected_size)
+        # Check and convert the size
+        try:
+            image_size = cli_get_size(selected_size)
 
-    # Check size compliance with livenet image expected size limits
-    if int(image_size) < (LivenetImage.MIN_LIVENET_SIZE) or int(image_size) > (LivenetImage.MAX_LIVENET_SIZE):
-        raise UserWarning('\nSize out of limits !')
+            # Check size compliance with livenet image expected size limits
+            if int(image_size) < (LivenetImage.MIN_LIVENET_SIZE) or int(image_size) > (LivenetImage.MAX_LIVENET_SIZE):
+                inform('Size out of limits, please enter another size !')
+            else:
+                break
+
+        except UserWarning as e:
+            inform(str(e))
 
     # Inject ssh key or not
-    printc('\nEnter path to SSH public key (left empty to disable key injection)', Color.GREEN)
-    selected_ssh_pub_key = input('-->: ')
-    if selected_ssh_pub_key != '' and not os.path.exists(selected_ssh_pub_key):
-        raise UserWarning('\nSSH public key not found ' + selected_ssh_pub_key)
-    if selected_ssh_pub_key == '':
-        selected_ssh_pub_key = None
+    ask_module('Enter path to SSH public key (left empty to disable key injection)')
+    while True:
+        selected_ssh_pub_key = input('-->: ')
+
+        if selected_ssh_pub_key != '' and not os.path.exists(selected_ssh_pub_key):
+            inform('SSH public key not found ' + selected_ssh_pub_key + ' , please enter another value.')
+
+        else:
+            if selected_ssh_pub_key == '':
+                selected_ssh_pub_key = None
+            break
 
     # Activate SELinux or not
-    printc('\nActivate SELinux inside the image (yes/no) ?', Color.GREEN)
-    answer_selinux = input('-->: ')
-    if answer_selinux == 'yes':
-        selinux = True
-    elif answer_selinux == 'no':
-        selinux = False
-    else:
-        raise UserWarning('\nInvalid input !')
+    ask_module('Activate SELinux inside the image (yes/no) ?')
+    while 'selinux' not in locals():
+        answer_selinux = input('-->: ')
+        if answer_selinux in {'yes', 'y'}:
+            selinux = True
+        elif answer_selinux in {'no', 'n'}:
+            selinux = False
+        else:
+            inform('Invalid input, please enter another value.')
 
     # Propose to user to install additional packages
-    printc('\nDo you want to customize your image with additional packages (yes/no) ? ', Color.GREEN)
-    choice = input('-->: ')
-    # Install additional packages
-    if choice == 'yes':
-        # Get package list from user
-        additional_packages = Image.cli_add_packages()
-    # Don't install additional packages
-    elif choice == 'no':
-        additional_packages = None
-    else:
-        raise UserWarning('\nInvalid entry !')
+    ask_module('Do you want to customize your image with additional packages (yes/no) ? ')
+    while 'additional_packages' not in locals():
+        choice = input('-->: ')
+        # Install additional packages
+        if choice in {'yes', 'y'}:
+            # Get package list from user
+            additional_packages = Image.cli_add_packages()
+        # Don't install additional packages
+        elif choice in {'no', 'n'}:
+            additional_packages = None
+        else:
+            inform('Invalid entry !')
 
     # Propose to user to specify a release version
-    printc('\nSpecify a release version for installation (left empty to not use the --relasever option)', Color.GREEN)
+    ask_module('Specify a release version for installation (left empty to not use the --relasever option)')
     release_version = input('-->: ')
     if release_version == '':
         release_version = None
 
     # Propose to optimize image packages
-    printc('\nDo you wish tool try to optimize image by using aggressive packages dependencies parameters ? ', Color.GREEN)
-    printc('Note that this may collide with additional packages if asked for. (yes/no) ? ', Color.GREEN)
-    answer_optimize = input('-->: ')
-    if answer_optimize == 'yes':
-        optimize = True
-    elif answer_optimize == 'no':
-        optimize = False
-    else:
-        raise UserWarning('\nInvalid input !')
+    ask_module('Do you wish tool try to optimize image by using aggressive packages dependencies parameters ?', 'Note that this may collide with additional packages if asked for. (yes/no) ?')
+
+    while 'optimize' not in locals():
+        answer_optimize = input('-->: ')
+        if answer_optimize in {'yes', 'y'}:
+            optimize = True
+        elif answer_optimize in {'no', 'n'}:
+            optimize = False
+        else:
+            inform('Invalid input, please enter another value.')
+
+    cli_construct_livenet_image(selected_image_name, selected_password, selected_kernel, selected_type, image_size, additional_packages, selected_ssh_pub_key, selinux, release_version, optimize)
+
+
+def cli_construct_livenet_image(name, password, kernel, type, size, additional_packages, ssh_pub_key, selinux, release_version, optimize):
+    """Create the new livenet image."""
 
     # Confirm image creation
-    printc('\n[+] Would you like to create a new livenet image with the following attributes: (yes/no)', Color.GREEN)
-    print('  ├── Image name: \t\t' + selected_image_name)
-    print('  ├── Image password: \t\t' + selected_password)
-    print('  ├── Image kernel: \t\t' + selected_kernel)
-    print('  ├── Image type: \t\t' + get_type)
-    print('  ├── Image size: \t\t' + selected_size)
+    ask_module('Would you like to create a new livenet image with the following attributes: (yes/no)')
+    print('  ├── Image name: \t\t' + name)
+    print('  ├── Image password: \t\t' + password)
+    print('  ├── Image kernel: \t\t' + kernel)
+    print('  ├── Image type: \t\t' + str(type))
+    print('  ├── Image size: \t\t' + str(size))
     print('  ├── Optimize packages: \t' + str(optimize))
 
     # Print ssh pub key packages if there is one
-    if selected_ssh_pub_key is not None:
-        print('  ├── SSH pubkey: \t\t' + selected_ssh_pub_key)
+    if ssh_pub_key is not None:
+        print('  ├── SSH pubkey: \t\t' + ssh_pub_key)
 
     # Print additional packages if there is
     if additional_packages is not None:
@@ -832,19 +943,34 @@ def cli_create_livenet_image():
 
     print('  └── Enable SELinux: \t\t' + str(selinux))
 
-    confirmation = input('-->: ').replace(" ", "")
+    while True:
+        confirmation = input('-->: ').replace(" ", "")
 
-    if confirmation == 'yes':
-        # Create the image object
-        LivenetImage(selected_image_name, selected_password, selected_kernel, selected_type, image_size, additional_packages, selected_ssh_pub_key, selinux, release_version, optimize)
-        printc('\n[OK] Done.', Color.GREEN)
+        # Image creation confirmed
+        if confirmation in {'yes', 'y'}:
 
-    elif confirmation == 'no':
-        printc('\n[+] Image creation cancelled, return to main menu.', Color.YELLOW)
-        return
+            try:
+                # Create the image object
+                LivenetImage(name, password, kernel, type, size, additional_packages, ssh_pub_key, selinux, release_version, optimize)
+                ok()
+                return
 
-    else:
-        raise UserWarning('\nInvalid confirmation !')
+            # If an exception occurs during the image creation process
+            except Exception as e:
+                # First, clean previous uncompleted installation
+                ImageManager.clean_installation(name)
+                warn('An exception occurred durring the installation process !',
+                     'The exception was: ' + str(e))
+
+            inform('Would you like to retry the installation with the same parameters (yes/no)?',
+                   '(If you exit now you will lost all the image creation parameters you entered.)')
+
+        elif confirmation in {'no', 'n'}:
+            inform('Image creation cancelled, return to main menu.')
+            return
+
+        else:
+            inform('Invalid confirmation !')
 
 
 def cli_mount_livenet_image():
@@ -857,16 +983,17 @@ def cli_mount_livenet_image():
     # Get staging images names
     unmounted_images_names = [livenet_image.name for livenet_image in livenet_images if livenet_image.is_mounted is False]
 
-    # Check if there unmounted images
+    # Check if there are unmounted images
     if not unmounted_images_names:
         raise UserWarning('No unmounted livenet images.')
 
     # Select a staging image for golden image creation
-    printc('[+] Select the livenet image to mount:', Color.GREEN)
+    ask_module('Select the livenet image to mount:')
     unmounted_image_name = select_from_list(unmounted_images_names)
     unmounted_image = ImageManager.get_created_image(unmounted_image_name)
 
     unmounted_image.mount()
+    ok("Image mounted !")
 
 
 def cli_unmount_livenet_image():
@@ -884,11 +1011,12 @@ def cli_unmount_livenet_image():
         raise UserWarning('No mounted livenet images.')
 
     # Select a staging image for golden image creation
-    printc('[+] Select the livenet image to unmount:', Color.GREEN)
+    ask_module('Select the livenet image to unmount:')
     mounted_image_name = select_from_list(mounted_images_names)
     mounted_image = ImageManager.get_created_image(mounted_image_name)
 
     mounted_image.unmount()
+    ok("Image unmounted !")
 
 
 def cli_resize_livenet_image():
@@ -905,35 +1033,48 @@ def cli_resize_livenet_image():
     # Check if there are unmounted images
     # An image must be unmounted to be resized
     if not unmounted_images_names:
-        raise UserWarning('No unmounted livenet images.')
+        raise UserWarning('No unmounted livenet images to resize.')
 
     # Select a livenet to mount
-    printc('[+] Select the livenet image to mount:', Color.GREEN)
+    ask_module('Select the livenet image to mount:')
     unmounted_image_name = select_from_list(unmounted_images_names)
     unmounted_image = ImageManager.get_created_image(unmounted_image_name)
 
     # Enter new size
-    printc('Please enter your new image size:\n(supported units: M=1024*1024, G=1024*1024*1024)\n(Examples: 5120M or 5G)', Color.GREEN)
-    selected_size = input('-->: ')
+    ask_module('Please enter your new image size:\n(supported units: M=1024*1024, G=1024*1024*1024)\n(Examples: 700M or 5G)')
 
-    # Check and convert the size
-    image_size = cli_get_size(selected_size)
+    while True:
+        selected_size = input('-->: ')
 
-    # Check size compliance with livenet image expected size limits
-    if int(image_size) < (LivenetImage.MIN_LIVENET_SIZE) or int(image_size) > (LivenetImage.MAX_LIVENET_SIZE):
-        raise UserWarning('\nSize out of limits !')
+        # Check and convert the size
+        try:
+            image_size = cli_get_size(selected_size)
+
+            # Check size compliance with livenet image expected size limits
+            if int(image_size) < (LivenetImage.MIN_LIVENET_SIZE) or int(image_size) > (LivenetImage.MAX_LIVENET_SIZE):
+                inform('Size out of limits, please enter another size !')
+            else:
+                break
+
+        except UserWarning as e:
+            inform(str(e))
 
     # Confirm image resizing
-    printc('\n[+] Are you sure you want to resize image \'' + unmounted_image.name + '\' with the following size: (yes/no)', Color.GREEN)
+    ask_module('Are you sure you want to resize image \'' + unmounted_image.name + '\' with the following size: (yes/no)')
     print('  └── Image size: ' + selected_size)
 
-    confirmation = input('-->: ').replace(" ", "")
+    while True:
+        confirmation = input('-->: ').replace(" ", "")
 
-    if confirmation == 'yes':
-        # Create the image object
-        unmounted_image.resize(image_size)
-        printc('\n[OK] Done.', Color.GREEN)
+        if confirmation in {'yes', 'y'}:
+            # Create the image object
+            unmounted_image.resize(image_size)
+            ok('Image resized !')
+            return
 
-    elif confirmation == 'no':
-        printc('\n[+] Image resizing cancelled, return to main menu.', Color.YELLOW)
-        return
+        elif confirmation in {'no', 'n'}:
+            inform('Image resizing cancelled, return to main menu.')
+            return
+
+        else:
+            inform('Invalid input, please enter another value.')
