@@ -75,7 +75,7 @@ mkdir -p $RPM_BUILD_ROOT/var/tmp/diskless/workdir
 %dir /var/tmp/diskless/workdir
 
 %changelog
-* Mon Ovt 2021 David Pieters <davidpieters22@gmail.com>
+* Mon Oct 22 2021 David Pieters <davidpieters22@gmail.com>
 - Diskless tool v1.3.0 update, it includes:
 - Add clone system.
 - Add create image from parameters file system.
