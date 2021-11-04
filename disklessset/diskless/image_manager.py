@@ -613,11 +613,11 @@ class ImageManager:
             if confirmation in {'yes', 'y'}:
                 # Clone the image
                 ImageManager.clone_image(image_to_clone, clone_name)
-                ok('Image clonned')
+                ok('Image cloned')
                 return
 
             elif confirmation in {'no', 'n'}:
-                inform('Image clonning cancelled')
+                inform('Image cloning cancelled')
                 return
 
             else:

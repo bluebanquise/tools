@@ -897,7 +897,7 @@ def cli_create_livenet_image_questions():
             inform('Invalid entry !')
 
     # Propose to user to specify a release version
-    ask_module('Specify a release version for installation (left empty to not use the --relasever option)')
+    ask_module('Specify a release version for installation (left empty to not use the --releasever option)')
     release_version = input('-->: ')
     if release_version == '':
         release_version = None
