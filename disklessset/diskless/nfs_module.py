@@ -10,6 +10,7 @@
 #    images with the diskless images
 #    management script.
 #
+# 1.3.0: Role update. David Pieters <davidpieters22@gmail.com>
 # 1.2.0: Role update. David Pieters <davidpieters22@gmail.com>, Benoit Leveugle <benoit.leveugle@gmail.com>
 # 1.1.0: Role update. Benoit Leveugle <benoit.leveugle@gmail.com>, Bruno Travouillon <devel@travouillon.fr>
 # 1.0.0: Role creation. Benoit Leveugle <benoit.leveugle@gmail.com>
@@ -22,12 +23,14 @@ import os
 import shutil
 import crypt
 import logging
+from subprocess import check_output, CalledProcessError
+
 
 # Import diskless modules
 from diskless.modules.base_module import Image
 from diskless.kernel_manager import KernelManager
 from diskless.image_manager import ImageManager
-from diskless.utils import Color, printc, select_from_list
+from diskless.utils import Color, printc, select_from_list, inform, warn, ask_module, ok
 
 
 # Class representing an nfs staging image
@@ -43,21 +46,26 @@ class NfsStagingImage(Image):
     def create_new_image(self, password, kernel, additional_packages, release_version):
         super().create_new_image()
 
-        # Checking all parameters
-        # Check name format
         if not isinstance(password, str) or len(password.split()) > 1:
-            raise ValueError('Unexpected password format.')
-
-        # Check kernel attribute
-        if kernel not in KernelManager.get_available_kernels():
-            raise ValueError('Invalid kernel.')
-
-        # Set image attributes before creation
-        self.kernel = kernel
-        self.image = 'initramfs-kernel-' + self.kernel.replace('vmlinuz-', '')
+            raise ValueError('Invalid password format parameter value')
         self.password = password
 
+        if kernel not in KernelManager.get_available_kernels():
+            raise ValueError('Invalid kernel parameter value')
+        self.kernel = kernel
+        self.image = 'initramfs-kernel-' + self.kernel.replace('vmlinuz-', '')
+
         if additional_packages is not None:
+            for package_name in additional_packages:
+                try:
+                    # Check packages availability
+                    logging.debug('Executing \'subprocess.check_output(\'dnf list \'' + package_name + ' | grep ' + package_name + ', shell=True)\'')
+                    check_output('dnf list ' + package_name + ' | grep ' + package_name, shell=True)
+
+                # If there is not running process for image creator instance pid
+                except CalledProcessError:
+                    raise ValueError('Invalid additional_packages parameter value')
+
             self.additional_packages = additional_packages
 
         if release_version is not None:
@@ -83,6 +91,42 @@ class NfsStagingImage(Image):
 
         logging.debug('Executing \'rm -rf ' + self.NFS_DIRECTORY + '\'')
         shutil.rmtree(self.NFS_DIRECTORY)
+
+    # Clone the image into another image
+    def clone(self, clone_name):
+
+        super().clone(clone_name)
+
+        # Clone directories path
+        CLONE_IMAGE_DIRECTORY = Image.IMAGES_DIRECTORY + clone_name + '/'
+        CLONE_NFS_DIRECTORY = NfsStagingImage.NFS_DIRECTORY + clone_name + '/'
+
+        # Copying image directory for the clone
+        logging.debug('Copying directory ' + self.IMAGE_DIRECTORY + ' into ' + CLONE_IMAGE_DIRECTORY)
+        logging.debug('Executing \'cp -r ' + self.IMAGE_DIRECTORY + ' ' + CLONE_IMAGE_DIRECTORY + '\'')
+        shutil.copytree(self.IMAGE_DIRECTORY, CLONE_IMAGE_DIRECTORY)
+
+        # Copying nfs directory for the clone
+        logging.debug('Copying directory ' + self.NFS_DIRECTORY + ' into ' + CLONE_NFS_DIRECTORY)
+        logging.debug('Executing \'cp -r ' + self.NFS_DIRECTORY + ' ' + CLONE_NFS_DIRECTORY + '\'')
+
+        # Don't crash copying symlinks because they can point to non existing ressources
+        # (it is not a booted file system)
+        shutil.copytree(self.NFS_DIRECTORY, CLONE_NFS_DIRECTORY, symlinks=True)
+
+        # Create a clone object
+        clone = NfsStagingImage(clone_name)
+
+        # Change the clone attribute values
+        clone.name = clone_name
+        clone.IMAGE_DIRECTORY = CLONE_IMAGE_DIRECTORY
+        clone.NFS_DIRECTORY = CLONE_NFS_DIRECTORY
+
+        # Register the clone to update it's image_data file values
+        clone.register_image()
+
+        # Update the boot.ipxe file content
+        clone.generate_ipxe_boot_file()
 
     # Create image base folders
     def create_image_folders(self):
@@ -145,6 +189,33 @@ class NfsStagingImage(Image):
             logging.debug('Executing \'rm -rf ' + NfsStagingImage.NFS_DIRECTORY + image_name + '\'')
             shutil.rmtree(NfsStagingImage.NFS_DIRECTORY + image_name)
 
+    # Get the parameters from a dictionary
+    @classmethod
+    def create_image_from_parameters(cls, image_dict):
+        super().create_image_from_parameters()
+
+        # Check that there are all mandatory the parameters
+        if not all(key in image_dict for key in ['name', 'password', 'kernel']):
+            raise ValueError('Invalid set of parameters')
+
+        # Getting attributes from the dictionary
+        name = str(image_dict['name'])
+        password = str(image_dict['password'])
+        kernel = image_dict['kernel']
+
+        if 'additional_packages' in image_dict:
+            additional_packages = image_dict['additional_packages']
+        else:
+            additional_packages = None
+
+        if 'release_version' in image_dict:
+            release_version = str(image_dict['release_version'])
+        else:
+            release_version = None
+
+        # Create the new image with the parameters
+        cli_construct_nfsstaging_image(name, password, kernel, additional_packages, release_version)
+
     @staticmethod
     def get_boot_file_template():
         """Get the class boot file template.
@@ -188,11 +259,21 @@ class NfsGoldenImage(Image):
     def create_new_image(self, staging_image):
         super().create_new_image()
 
+        # Checking all parameters compliance
+        if not ImageManager.is_image(staging_image.name):
+            raise ValueError('Invalid staging_image parameter value')
+
         # Set image attributes before creation
         self.kernel = staging_image.kernel
         self.image = 'initramfs-kernel-' + self.kernel.replace('vmlinuz-', '')
         self.password = staging_image.password
-        self.release_version = staging_image.release_version
+
+        if hasattr(staging_image, 'additional_packages'):
+            self.additional_packages = staging_image.additional_packages
+
+        if hasattr(staging_image, 'release_version'):
+            self.release_version = staging_image.release_version
+
         self.nodes = NodeSet()
         self.NFS_DIRECTORY = NfsGoldenImage.NFS_DIRECTORY + self.name + '/'
 
@@ -273,6 +354,42 @@ class NfsGoldenImage(Image):
         logging.debug('Executing \'rm -rf ' + self.NFS_DIRECTORY + '\'')
         shutil.rmtree(self.NFS_DIRECTORY)
 
+    # Clone the image into another image
+    def clone(self, clone_name):
+
+        super().clone(clone_name)
+
+        # Clone directories path
+        CLONE_IMAGE_DIRECTORY = Image.IMAGES_DIRECTORY + clone_name + '/'
+        CLONE_NFS_DIRECTORY = NfsGoldenImage.NFS_DIRECTORY + clone_name + '/'
+
+        # Copying image directory for the clone
+        logging.debug('Copying directory ' + self.IMAGE_DIRECTORY + ' into ' + CLONE_IMAGE_DIRECTORY)
+        logging.debug('Executing \'cp -r ' + self.IMAGE_DIRECTORY + ' ' + CLONE_IMAGE_DIRECTORY + '\'')
+        shutil.copytree(self.IMAGE_DIRECTORY, CLONE_IMAGE_DIRECTORY)
+
+        # Copying nfs directory for the clone
+        logging.debug('Copying directory ' + self.NFS_DIRECTORY + ' into ' + CLONE_NFS_DIRECTORY)
+        logging.debug('Executing \'cp -r ' + self.NFS_DIRECTORY + ' ' + CLONE_NFS_DIRECTORY + '\'')
+
+        # Don't crash copying symlinks because they can point to non existing ressources
+        # (it is not a booted file system)
+        shutil.copytree(self.NFS_DIRECTORY, CLONE_NFS_DIRECTORY, symlinks=True)
+
+        # Create a clone object
+        clone = NfsGoldenImage(clone_name)
+
+        # Change the clone attribute values
+        clone.name = clone_name
+        clone.IMAGE_DIRECTORY = CLONE_IMAGE_DIRECTORY
+        clone.NFS_DIRECTORY = CLONE_NFS_DIRECTORY
+
+        # Register the clone to update it's image_data file values
+        clone.register_image()
+
+        # Update the boot.ipxe file content
+        clone.generate_ipxe_boot_file()
+
     # Clean all image files without image object when an image is corrupted
     @staticmethod
     def clean(image_name):
@@ -324,88 +441,94 @@ boot
 #####################
 
 def cli_menu():
+
     # Display main menu
-    printc('\n == NFS image module == \n', Color.GREEN)
+    printc('\n == NFS image module == ', Color.GREEN)
 
-    print(' 1 - Generate a new nfs staging image')
-    print(' 2 - Generate a new nfs golden image from a staging image')
-    print(' 3 - Manage nodes of a golden image')
+    ask_module('Select an action:')
+    action_list = ['Generate a new nfs staging image', 'Generate a new nfs golden image from a staging image', 'Manage nodes of a golden image']
 
-    # Answer and get the action to execute
-    print('\n Select an action')
-    main_action = input('-->: ')
-    print('')
+    while True:
+        action = select_from_list(action_list)
 
-    if main_action == '1':
-        cli_create_staging_image()
+        try:
+            if action == 'Generate a new nfs staging image':
+                cli_create_nfsstaging_image_questions()
+            elif action == 'Generate a new nfs golden image from a staging image':
+                cli_create_nfsgolden_image_questions()
+            else:
+                cli_manage_nodes()
+            break
 
-    elif main_action == '2':
-        cli_create_golden_image()
-
-    elif main_action == '3':
-        cli_manage_nodes()
-
-    # Bad entry
-    else:
-        raise UserWarning('\'' + main_action + '\' is not a valid entry. Please enter another value.')
+        # Catch the error in order to stay in this menu if an error appends
+        except UserWarning as e:
+            inform(str(e))
 
 
-def cli_create_staging_image():
+def cli_create_nfsstaging_image_questions():
+    """Getting all the image building arguments from the user shell."""
 
     # Get available kernels
     kernel_list = KernelManager.get_available_kernels()
 
-    # If there are no kernels aise an exception
+    # If there are no kernels raise an exception
     if not kernel_list:
         raise UserWarning('No kernel available')
 
     # Condition to test if image name is compliant
+    ask_module('Give a name for your image')
     while True:
 
-        printc('[+] Give a name for your image', Color.GREEN)
         # Get new image name
         selected_image_name = input('-->: ').replace(" ", "")
 
         if selected_image_name == '':
-            raise UserWarning('Image name cannot be empty !')
+            inform('Image name cannot be empty !')
 
         if not ImageManager.is_image(selected_image_name):
             break
 
         # Else
-        print('Image ' + selected_image_name + ' already exist, use another image name.')
+        inform('Image ' + selected_image_name + ' already exist, use another image name.')
 
     # Select the kernel to use
-    printc('\n[+] Select your kernel:', Color.GREEN)
+    ask_module('Select your kernel:')
     selected_kernel = select_from_list(kernel_list)
 
     # Manage password
-    printc('\n[+] Give a password for your image', Color.GREEN)
+    ask_module('Give a password for your image')
     selected_password = input('Please enter clear root password of the new image: ').replace(" ", "")
 
     # Propose to user to install additional packages
-    printc('\nDo you want to customize your image with additional packages? (yes/no)', Color.GREEN)
-    choice = input('-->: ')
-    # Install addictional packages
-    if choice == 'yes':
-        # Get package list from user
-        additional_packages = Image.cli_add_packages()
-    # Don't install additional packages
-    elif choice == 'no':
-        additional_packages = None
-    else:
-        raise UserWarning('\nInvalid entry !')
+    ask_module('Do you want to customize your image with additional packages? (yes/no)')
+    while 'additional_packages' not in locals():
+        choice = input('-->: ')
+        # Install addictional packages
+        if choice in {'yes', 'y'}:
+            # Get package list from user
+            additional_packages = Image.cli_add_packages()
+        # Don't install additional packages
+        elif choice in {'no', 'n'}:
+            additional_packages = None
+        else:
+            inform('Invalid entry !')
 
     # Propose to user to specify a release version
-    printc('\nSpecify a release version for installation (left empty to not use the --relasever option)', Color.GREEN)
+    ask_module('Specify a release version for installation (left empty to not use the --releasever option)')
     release_version = input('-->: ')
     if release_version == '':
         release_version = None
 
+    cli_construct_nfsstaging_image(selected_image_name, selected_password, selected_kernel, additional_packages, release_version)
+
+
+def cli_construct_nfsstaging_image(name, password, kernel, additional_packages, release_version):
+    """Create the new nfs staging image"""
+
     # Confirm image creation
-    printc('\n[+] Would you like to create a new nfs staging image with the following attributes: (yes/no)', Color.GREEN)
-    print('  ├── Image name: \t\t' + selected_image_name)
-    print('  ├── Image password : \t\t' + selected_password)
+    ask_module('Would you like to create a new nfs staging image with the following attributes: (yes/no)')
+    print('  ├── Image name: \t\t' + name)
+    print('  ├── Image password : \t\t' + password)
 
     # Print additional packages if there is
     if additional_packages is not None:
@@ -415,25 +538,42 @@ def cli_create_staging_image():
     if release_version is not None:
         print('  ├── Release version: \t\t' + release_version)
 
-    print('  └── Image kernel: \t\t' + selected_kernel)
+    print('  └── Image kernel: \t\t' + kernel)
 
-    confirmation = input('-->: ').replace(" ", "")
+    while True:
+        confirmation = input('-->: ').replace(" ", "")
 
-    if confirmation == 'yes':
-        # Create the image object
-        NfsStagingImage(selected_image_name, selected_password, selected_kernel, additional_packages, release_version)
-        printc('\n[OK] Done.', Color.GREEN)
+        # Image creation confirmed
+        if confirmation in {'yes', 'y'}:
 
-    elif confirmation == 'no':
-        printc('\n[+] Image creation cancelled, return to main menu.', Color.YELLOW)
-        return
+            try:
+                # Create the image object
+                NfsStagingImage(name, password, kernel, additional_packages, release_version)
+                ok()
+                return
 
-    else:
-        raise UserWarning('\nInvalid confirmation !')
+            # If an exception occurs during the image creation process
+            except Exception as e:
+                # First, clean previous uncompleted installation
+                ImageManager.clean_installation(name)
+                warn('An exception occurred durring the installation process !',
+                     'The exception was: ' + str(e))
+
+            inform('Would you like to retry the installation with the same parameters (yes/no)?',
+                   '(If you exit now you will lost all the image creation parameters you entered.)')
+
+        elif confirmation in {'no', 'n'}:
+            inform('Image creation cancelled, return to main menu.')
+            return
+
+        else:
+            inform('Invalid confirmation !')
 
 
 # Create a golden image from a staging image
-def cli_create_golden_image():
+def cli_create_nfsgolden_image_questions():
+    """Getting all the image building arguments from the user shell."""
+
     # Get all staging images
     staging_images = NfsStagingImage.get_images()
 
@@ -445,44 +585,65 @@ def cli_create_golden_image():
     staging_images_names = [staging_image.name for staging_image in staging_images]
 
     # Select a staging image for golden image creation
-    printc('[+] Select the nfs image to use for golden image creation:', Color.GREEN)
+    ask_module('Select the nfs image to use for golden image creation:')
     staging_image_name = select_from_list(staging_images_names)
     staging_image = ImageManager.get_created_image(staging_image_name)
 
     # Condition to test if image name is compliant
+    ask_module(' Give a name for your image')
     while True:
 
-        printc('\n[+] Give a name for your image', Color.GREEN)
         # Get new image name
         selected_image_name = input('-->: ').replace(" ", "")
 
         if selected_image_name == '':
-            raise UserWarning('Image name cannot be empty !')
+            inform('Image name cannot be empty !')
 
-        if not ImageManager.is_image(selected_image_name):
+        elif ImageManager.is_image(selected_image_name):
+            inform('Image ' + selected_image_name + ' already exist, use another image name.')
+
+        else:
             break
 
-        # Else
-        print('Image ' + selected_image_name + ' already exist, use another image name.')
+    cli_construct_nfsgolden_image(selected_image_name, staging_image)
+
+
+def cli_construct_nfsgolden_image(name, staging_image):
+    """Create the new nfs golden image."""
 
     # Confirm image creation
-    printc('\n[+] Would you like to create a new nfs golden image with the following attributes: (yes/no)', Color.GREEN)
-    print('  ├── Image name: \t\t' + selected_image_name)
+    ask_module(' Would you like to create a new nfs golden image with the following attributes: (yes/no)')
+    print('  ├── Image name: \t\t' + name)
     print('  └── Staging image from: \t' + staging_image.name)
 
-    confirmation = input('-->: ').replace(" ", "")
+    while True:
+        confirmation = input('-->: ').replace(" ", "")
 
-    if confirmation == 'yes':
-        # Create the image object
-        NfsGoldenImage(selected_image_name, staging_image)
-        printc('\n[OK] Done.', Color.GREEN)
+        # Image creation confirmed
+        if confirmation in {'yes', 'y'}:
 
-    elif confirmation == 'no':
-        printc('\nImage creation cancelled, return to main menu.', Color.YELLOW)
-        return
+            try:
+                # Create the image object
+                NfsGoldenImage(name, staging_image)
+                ok()
+                return
 
-    else:
-        raise UserWarning('\nInvalid confirmation !')
+            # If an error occurs during the image creation
+            except Exception as e:
+                # First, clean previous uncompleted installation
+                ImageManager.clean_installation(name)
+                warn('An exception occurs durring the installation process !',
+                     'The exception was: ' + str(e))
+
+            inform('Would you like to retry the installation with the same parameters (yes/no)?',
+                   '(If you exit now you will lost all the image creation parameters you entered.)')
+
+        elif confirmation in {'no', 'n'}:
+            inform('Image creation cancelled, return to main menu.')
+            return
+
+        else:
+            inform('Invalid confirmation !')
 
 
 # Manage a golden image nodes
@@ -497,50 +658,49 @@ def cli_manage_nodes():
     golden_images_names = [golden_image.name for golden_image in golden_images]
 
     # Select the golden image to manage from list
-    printc('\n[+] Select the golden image to manage:', Color.GREEN)
+    ask_module('Select the golden image to manage:')
     golden_image_name = select_from_list(golden_images_names)
     golden_image = ImageManager.get_created_image(golden_image_name)
 
     # Choose an action for nodes management
-    printc('\n[+] Manages nodes of image ' + golden_image_name, Color.GREEN)
-    print(' 1 - List nodes with the image')
-    print(' 2 - Add nodes with the image')
-    print(' 3 - Remove nodes with the image')
-
-    action = input('-->: ')
+    ask_module('Manages nodes of image ' + golden_image_name)
+    action_list = ['List nodes with the image', 'Add nodes with the image', 'Remove nodes with the image']
+    action = select_from_list(action_list)
 
     # Print golden image nodes
-    if action == '1':
+    if action == 'List nodes with the image':
         nodeset = golden_image.get_nodes()
         print(nodeset)
-        printc('\n[OK] Done.', Color.GREEN)
+        ok()
 
     # Add some nodes to the image
-    elif action == '2':
-        printc('\n[+] Actual image NodeSet is: ' + str(golden_image.nodes), Color.GREEN)
-        printc('[+] Please enter nodes range to add:', Color.GREEN)
+    elif action == 'Add nodes with the image':
+        if golden_image.nodes.__len__() == 0:
+            ask_module('Actualy there are no nodes for this image', 'Please enter nodes range to add:')
+        else:
+            ask_module('Actual image NodeSet is: ' + str(golden_image.nodes), 'Please enter nodes range to add:')
 
-        nodes_range = input('-->: ').replace(" ", "")
-        # Test if nodes_range is a valid range
-        try:
-            golden_image.add_nodes(nodes_range)
-            printc('\n[OK] Done.', Color.GREEN)
+        while True:
+            nodes_range = input('-->: ').replace(" ", "")
+            # Test if nodes_range is a valid range
+            try:
+                golden_image.add_nodes(nodes_range)
+                ok('Nodes added !')
+                break
 
-        except KeyError:
-            raise UserWarning('The Node you have entered is not compliant.')
+            except KeyError:
+                inform("Invalid input value, please enter another range value.")
 
     # Delete nodes from image
-    elif action == '3':
-        printc('\n[+] Please enter nodes range to remove:', Color.GREEN)
+    elif action == 'Remove nodes with the image':
+        ask_module('Please enter nodes range to remove:')
+        while True:
+            nodes_range = input('-->: ').replace(" ", "")
+            # Test if nodes_range is a valid range
+            try:
+                golden_image.remove_nodes(nodes_range)
+                ok('Nodes removed !')
+                break
 
-        nodes_range = input('-->: ').replace(" ", "")
-        # Test if nodes_range is a valid range
-        try:
-            golden_image.remove_nodes(nodes_range)
-            printc('\n[OK] Done.', Color.GREEN)
-
-        except KeyError:
-            raise UserWarning('The Node you have entered is not compliant.')
-
-    else:
-        raise UserWarning('Not a valid entry')
+            except KeyError:
+                inform("Invalid input value, please enter another range value.")

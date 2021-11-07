@@ -10,6 +10,7 @@
 #    for all images classes. You need to be in compliance with this
 #    class when creating new diskless images classes.
 #
+# 1.3.0: Role update. David Pieters <davidpieters22@gmail.com>
 # 1.2.0: Role update. David Pieters <davidpieters22@gmail.com>, Benoit Leveugle <benoit.leveugle@gmail.com>
 # 1.1.0: Role update. Benoit Leveugle <benoit.leveugle@gmail.com>, Bruno Travouillon <devel@travouillon.fr>
 # 1.0.0: Role creation. Benoit Leveugle <benoit.leveugle@gmail.com>
@@ -21,14 +22,14 @@
 import os
 import shutil
 from datetime import datetime
-import yaml
 import logging
 from abc import ABC, abstractmethod
 import subprocess
 
 # Import diskless modules
-from diskless.utils import Color, printc
+from diskless.utils import inform
 from diskless.image_manager import ImageManager
+from diskless.utils import ask_module, load_file
 
 
 class Image(ABC):
@@ -128,6 +129,14 @@ class Image(ABC):
             logging.debug('Executing \'rm -rf ' + self.IMAGE_DIRECTORY + '\'')
             shutil.rmtree(self.IMAGE_DIRECTORY)
 
+    @abstractmethod
+    def clone(self, clone_name):
+        """Clone the image into another image.
+        :param clone_name: The name of the clone who will be cloned
+        :type clone_name: str
+        """
+        logging.info('Clonning image \'' + self.name + '\' into \'' + clone_name + '\'')
+
     @staticmethod
     @abstractmethod
     def get_boot_file_template():
@@ -142,7 +151,6 @@ class Image(ABC):
         It is usefull to clean all files when an image has crashed during it's creation.
         This method must be redefined in all Image subclasses.
         The redefinition must clean all possible remaining image files.
-
         :param image_name: The name of the image to clean
         :type image_name: str
         """
@@ -190,14 +198,10 @@ class Image(ABC):
         """Getting image data that has been writen inside the image image_data.yml during register_image() call."""
 
         # Reading image_data file
-        with open(self.IMAGE_DIRECTORY + '/image_data.yml', 'r') as f:
-            # Getting all data
-            data = yaml.safe_load(f)
-            # Getting image_data
-            image_data = data['image_data']
+        data = load_file(self.IMAGE_DIRECTORY + '/image_data.yml')
 
-        # Return the array of data
-        return image_data
+        # Getting image_data
+        return data['image_data']
 
     def get_existing_image(self):
         """Load an existing image. The loading consist of getting all image attributes from it's image_data.yml file."""
@@ -258,6 +262,15 @@ class Image(ABC):
         # Return all class images
         return class_images
 
+    @classmethod
+    def create_image_from_parameters(cls):
+        """Getting all the image building arguments from a dictionary
+
+        :param image_dict: The dictionary of parameters
+        :type image_dict: str
+        """
+        logging.info('Parsing input parameters...')
+
     #####################
     # CLI reserved part #
     #####################
@@ -284,22 +297,23 @@ class Image(ABC):
     @staticmethod
     def cli_add_packages():
         """Ask user for a list of packages"""
-        printc('Give a list of packages separated by spaces.', Color.GREEN)
-        printc('Exemple: \'package1 package2 package3 ...\' ', Color.GREEN)
-        # Get packages
-        package_list = input('-->: ').split()
+        ask_module('Give a list of packages separated by spaces.', 'Exemple: \'package1 package2 package3 ...\' ')
 
-        logging.debug('Checking that requested packages exists')
-        # For each package
-        for package_name in package_list:
-            try:
-                # Check packages availability
-                logging.debug('Executing \'subprocess.check_output(\'dnf list \'' + package_name + ' | grep ' + package_name + ', shell=True)\'')
-                subprocess.check_output('dnf list ' + package_name + ' | grep ' + package_name, shell=True)
+        while True:
 
-            # If there is not running process for image creator instance pid
-            except subprocess.CalledProcessError:
-                raise UserWarning("Package \'" + package_name + '\' not available')
+            # Get packages
+            package_list = input('-->: ').split()
 
-        # Return the list of packages
-        return package_list
+            logging.debug('Checking that requested packages exists...')
+            # For each package
+            for package_name in package_list:
+                try:
+                    # Check packages availability
+                    logging.debug('Executing \'subprocess.check_output(\'dnf list \'' + package_name + ' | grep ' + package_name + ', shell=True)\'')
+                    subprocess.check_output('dnf list ' + package_name + ' | grep ' + package_name, shell=True)
+                    # Return the list of packages
+                    return package_list
+
+                # If there is not running process for image creator instance pid
+                except subprocess.CalledProcessError:
+                    inform("Package \'" + package_name + '\' not available, try again.')

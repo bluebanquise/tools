@@ -35,7 +35,7 @@ cp -R diskless $RPM_BUILD_ROOT/%{python3_sitelib}/
 mv $RPM_BUILD_ROOT/%{python3_sitelib}/diskless/*_module.py $RPM_BUILD_ROOT/%{python3_sitelib}/diskless/modules
 
 mkdir -p $RPM_BUILD_ROOT/usr/bin/
-cp disklessset $RPM_BUILD_ROOT/usr/bin/disklessset
+cp disklessset.py $RPM_BUILD_ROOT/usr/bin/disklessset
 
 # create /etc/disklessset/diskless_parameters.yml with default values
 mkdir -p $RPM_BUILD_ROOT/etc/disklessset
@@ -47,6 +47,8 @@ EOF
 # create empty /var/lib/diskless/installations.yml
 mkdir -p $RPM_BUILD_ROOT/var/lib/diskless
 touch $RPM_BUILD_ROOT/var/lib/diskless/installations.yml
+# Add dictionary format to the file
+echo "{}" > $RPM_BUILD_ROOT/var/lib/diskless/installations.yml
 
 # Create base directories for images
 mkdir -p $RPM_BUILD_ROOT/var/www/html/preboot_execution_environment/diskless/{images,kernels}
@@ -73,6 +75,14 @@ mkdir -p $RPM_BUILD_ROOT/var/tmp/diskless/workdir
 %dir /var/tmp/diskless/workdir
 
 %changelog
+* Mon Oct 22 2021 David Pieters <davidpieters22@gmail.com>
+- Diskless tool v1.3.0 update, it includes:
+- Add clone system.
+- Add create image from parameters file system.
+- Review display system.
+- Review questions system and menu.
+- Add info mode and debug mode command.
+
 * Mon Aug 16 2021 Giacomo Mc Evoy <gino.mcevoy@gmail.com>
 - Add RPM dependencies
 - Install modules inside diskless/modules
