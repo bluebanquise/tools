@@ -8,7 +8,7 @@
 # ╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝ ╚══▀▀═╝  ╚═════╝ ╚═╝╚══════╝╚══════╝
 #
 # booset tool, to manage nodes PXE boot
-# 2019_2020 - Benoît Leveugle <benoit.leveugle@sphenisc.com>
+# 2019_2021 - Benoît Leveugle <benoit.leveugle@sphenisc.com>
 #             Adrien Ribeiro <adrien.ribeiro@atos.net>
 # https://github.com/bluebanquise/bluebanquise - MIT license
 
@@ -18,7 +18,7 @@ import os
 import pwd
 import re
 from argparse import ArgumentParser
-
+from packaging import version
 import yaml
 from ClusterShell.NodeSet import NodeSet
 
@@ -38,8 +38,10 @@ class bcolors:
 def load_file(filename):
     logging.info(bcolors.OKBLUE+'Loading '+filename+bcolors.ENDC)
     with open(filename, 'r') as f:
-        # return yaml.load(f, Loader=yaml.FullLoader) ## Waiting for PyYaml 5.1
-        return yaml.load(f)
+        if version.parse(yaml.__version__) < version.parse("5.1.0"):
+            return yaml.load(f)
+        else:
+            return yaml.load(f, Loader=yaml.FullLoader)
 
 
 def set_default_boot(node, boot, node_image=None, extra_parameters=None):
@@ -79,6 +81,14 @@ parser.add_argument("-q", "--quiet", action="store_true",
                     help="Do not print INFO messages.")
 
 passed_arguments = parser.parse_args()
+
+print("""\
+
+ BlueBanquise bootset
+ v1.0.1
+ https://github.com/bluebanquise/tools/
+
+""")
 
 # Enable logging
 loglevel = logging.INFO
