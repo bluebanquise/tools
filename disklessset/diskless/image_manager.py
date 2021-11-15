@@ -669,7 +669,7 @@ class ImageManager:
             inform('No images.')
             return
 
-        warn('⚠ Would you realy clean image \'' + image_name + '\' definitively (yes/no) ?')
+        warn('⚠ Clear image \'' + image_name + '\'. Are you sure (yes/no) ?')
 
         while True:
             # get confirmation from user
@@ -693,7 +693,7 @@ class ImageManager:
         """Ask user for removing an image"""
         # Get image object to remove
         image = ImageManager.get_created_image(ImageManager.cli_select_created_image())
-        warn('⚠ Would you realy like to delete image \'' + image.name + '\' definitively (yes/no) ?')
+        warn('⚠ Remove image \'' + image.name + '\'. Are you sure (yes/no) ?')
 
         while True:
 

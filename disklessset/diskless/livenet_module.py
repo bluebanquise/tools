@@ -168,8 +168,8 @@ class LivenetImage(Image):
 
         # Get appropriate packages for desired image file system
         if self.livenet_type == LivenetImage.Type.STANDARD:
-            logging.debug('Standard image requested. Adding "@core" to packages list')
-            dnf_packages = '@core'
+            logging.debug('Standard image requested. Adding "@core kernel-modules" to packages list')
+            dnf_packages = '@core kernel-modules'
 
         elif self.livenet_type == LivenetImage.Type.SMALL:
             logging.debug('Small image requested. Adding "dnf yum iproute procps-ng openssh-server NetworkManager" to packages list')
@@ -230,8 +230,8 @@ class LivenetImage(Image):
         os.system('mount -o loop ' + self.IMAGE_DIRECTORY + 'tosquash/LiveOS/rootfs.img ' + self.MOUNT_DIRECTORY)
 
         # Put the operating system inside rootfs.img
-        logging.debug('Executing \'cp -a ' + self.WORKING_DIRECTORY + 'generated_os/* ' + self.MOUNT_DIRECTORY + '\'')
-        os.system('cp -a ' + self.WORKING_DIRECTORY + 'generated_os/* ' + self.MOUNT_DIRECTORY)
+        logging.debug('Executing \'cp -a ' + self.WORKING_DIRECTORY + 'generated_os/. ' + self.MOUNT_DIRECTORY + '\'')
+        os.system('cp -a ' + self.WORKING_DIRECTORY + 'generated_os/. ' + self.MOUNT_DIRECTORY)
 
         # Unmount rootfs.img file
         logging.debug('Executing \'umount ' + self.MOUNT_DIRECTORY + '\'')
@@ -830,10 +830,10 @@ def cli_create_livenet_image_questions():
 
     # Select livenet type
     ask_module('Choose your image type:')
-    types_list = ['Standard: core (~1.3Gb)', 'Small: openssh, dnf and NetworkManager (~700Mb)', 'Minimal: openssh only (~680Mb)']
+    types_list = ['Standard: core and kernel-modules (~1.3Gb)', 'Small: openssh, dnf and NetworkManager (~700Mb)', 'Minimal: openssh only (~680Mb)']
     get_type = select_from_list(types_list)
 
-    if get_type == 'Standard: core (~1.3Gb)':
+    if get_type == 'Standard: core and kernel-modules (~1.3Gb)':
         selected_type = LivenetImage.Type.STANDARD
     elif get_type == 'Small: openssh, dnf and NetworkManager (~700Mb)':
         selected_type = LivenetImage.Type.SMALL
