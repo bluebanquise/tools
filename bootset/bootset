@@ -8,8 +8,10 @@
 # ╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝ ╚══▀▀═╝  ╚═════╝ ╚═╝╚══════╝╚══════╝
 #
 # booset tool, to manage nodes PXE boot
-# 2019_2021 - Benoît Leveugle <benoit.leveugle@sphenisc.com>
-#             Adrien Ribeiro <adrien.ribeiro@atos.net>
+#   - Benoît Leveugle <benoit.leveugle@gmail.com>
+#   - Adrien Ribeiro <adrien.ribeiro@atos.net>
+#   - Bruno <devel@travouillon.fr> 
+#   - johnnykeats <johnny.keats@outlook.com>
 # https://github.com/bluebanquise/bluebanquise - MIT license
 
 import grp
