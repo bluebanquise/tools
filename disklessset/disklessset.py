@@ -11,6 +11,7 @@
 #    This python script allows to create and manage diskless
 #    images from a linux command line interface.
 #
+# 1.3.1: Fix yaml loader issue. Johnny Keats <johnny.keats@outlook.com>
 # 1.3.0: Role update. David Pieters <davidpieters22@gmail.com>
 # 1.2.0: Role update. David Pieters <davidpieters22@gmail.com>, Benoit Leveugle <benoit.leveugle@gmail.com>
 # 1.1.0: Role update. Benoit Leveugle <benoit.leveugle@gmail.com>, Bruno Travouillon <devel@travouillon.fr>
@@ -55,7 +56,9 @@ if __name__ == "__main__":
 """
 
     # Print script banner
-    printc(BANNER + '\n        Entering BlueBanquise diskless manager (v1.3.0)', Color.BLUE)
+    printc(BANNER + '\n        BlueBanquise diskless manager', Color.BLUE)
+    printc('        v1.3.1', Color.BLUE)
+    printc('        https://github.com/bluebanquise/tools/', Color.BLUE)
 
     # Create a main_action variable
     main_action = ''
