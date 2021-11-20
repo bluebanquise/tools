@@ -10,7 +10,7 @@
 # booset tool, to manage nodes PXE boot
 #   - Benoît Leveugle <benoit.leveugle@gmail.com>
 #   - Adrien Ribeiro <adrien.ribeiro@atos.net>
-#   - Bruno <devel@travouillon.fr> 
+#   - Bruno Travouillon <devel@travouillon.fr> 
 #   - johnnykeats <johnny.keats@outlook.com>
 # https://github.com/bluebanquise/bluebanquise - MIT license
 
