@@ -10,6 +10,7 @@
 #    allow to make basic actions on images. It can
 #    manage all types of images.
 #
+# 1.3.0: Role update. David Pieters <davidpieters22@gmail.com>
 # 1.2.0: Role update. David Pieters <davidpieters22@gmail.com>, Benoit Leveugle <benoit.leveugle@gmail.com>
 # 1.1.0: Role update. Benoit Leveugle <benoit.leveugle@gmail.com>, Bruno Travouillon <devel@travouillon.fr>
 # 1.0.0: Role creation. Benoit Leveugle <benoit.leveugle@gmail.com>
@@ -27,15 +28,13 @@ import sys
 from enum import Enum, auto
 
 # Import diskless modules
-from diskless.utils import Color, printc, select_from_list, load_file
+from diskless.utils import Color, printc, select_from_list, load_file, inform, ask, ok, warn
 
 
 class ImageManager:
     """Class to manage images of the diskless tool."""
 
     # Modules location
-#    MODULES_PATH = '/lib/python3.9/site-packages/diskless/modules'
-#    IMAGES_DIRECTORY = '/var/www/html/preboot_execution_environment/diskless/images/'
     diskless_parameters = load_file('/etc/disklessset/diskless_parameters.yml')
     MODULES_PATH = diskless_parameters['modules_path']
     IMAGES_DIRECTORY = diskless_parameters['images_directory']
@@ -163,7 +162,7 @@ class ImageManager:
         except FileNotFoundError:
             raise FileNotFoundError('Error loading image_data file for image ' + image_name)
         except ValueError:
-            raise ValueError('Enable to load image class for image ' + image_name + 'from image data file ' + image_data_file)
+            raise ValueError('Unable to load image class for image ' + image_name + 'from image data file ' + image_data_file)
 
     # Get all images objects
     @staticmethod
@@ -214,6 +213,18 @@ class ImageManager:
         image.remove_files()
 
     @staticmethod
+    def clone_image(image, clone_name):
+        """clone an existing image
+
+        :param image: A created image object
+        :type image: Image
+        :param clone_name: The name of the clone
+        :type clone_name: str
+        """
+        # Use image object method to delete all related files
+        image.clone(clone_name)
+
+    @staticmethod
     def is_image(image_name):
         """Check if an image_name correspond to an image
 
@@ -231,7 +242,7 @@ class ImageManager:
         return False
 
     @classmethod
-    def clean_intallations(cls):
+    def clean_installations(cls):
         """Clean all corrupted images."""
         logging.debug("Start cleaning images...\n")
 
@@ -258,7 +269,7 @@ class ImageManager:
                 logging.warning('Image \'' + image_name + '\' cleaned\n')
 
     @classmethod
-    def clean_intallation(cls, image_name):
+    def clean_installation(cls, image_name):
         """Clean an specific image.
 
         :param image_name: The name of the created or corrupted image object to clean
@@ -328,12 +339,17 @@ class ImageManager:
                 subprocess.check_output("ps -A -o pid | grep -w " + str(image_pid), shell=True)
                 # An image is in creation if there is in the ongoing_intallations dictionary
                 # and there is a process instance to finishing created it.
-                return cls.ImageStatus.IN_CREATION
+
+                if image_pid == os.getpid():
+                    # Cannot be at this program point and creating image at the same time
+                    return cls.ImageStatus.CORRUPTED
+                else:
+                    return cls.ImageStatus.IN_CREATION
 
             # If there is not running process for image creator instance pid
             except subprocess.CalledProcessError:
                 # An image is corrupted when it is in the ongoing_intallations dictionary
-                # but there is no process instance to finishing created it.
+                # but there is no process instance to finishing to creating it.
                 return cls.ImageStatus.CORRUPTED
 
         # The not in ongoing installation
@@ -375,7 +391,7 @@ class ImageManager:
         # Get ongoing_intallations dictionary
         ongoing_intallations = cls.get_ongoing_installations()
         # Add image to dictionary
-        ongoing_intallations[image_name] = {'pid': os.getpid(), 'image_class': image_class}
+        ongoing_intallations[image_name] = {'image_class': image_class, 'pid': os.getpid()}
         # Write ongoing_intallations dictionary
         cls.set_ongoin_installations(ongoing_intallations)
 
@@ -419,7 +435,7 @@ class ImageManager:
             return ongoing_intallations
 
         except FileNotFoundError:
-            raise FileNotFoundError('Enable to load /diskless/installations.yml file')
+            raise FileNotFoundError('Unable to load /diskless/installations.yml file')
 
     # Set ongoing_intallations dictionary content
     @classmethod
@@ -438,6 +454,51 @@ class ImageManager:
 
         except FileNotFoundError:
             raise FileNotFoundError('File /diskless/installations.yml cannot be writen.')
+
+    @classmethod
+    def create_image_from_parameters(cls, parameters_file):
+        """Create an image from a file containing all the creation parameters
+
+        :param parameters_file: The location of the parameters file
+        :type parameters_file: str
+        :raises ValueError: If the data inside the parameters file are not compliant
+        :raises FileNotFoundError: If parameters file not readable
+        """
+        try:
+            # Get parameters file content
+            image_dict = load_file(parameters_file)
+
+            # Test dictionary content format
+            if 'image_data' not in image_dict:
+                raise ValueError('Invalide parameter file format.')
+            else:
+                image_dict = image_dict['image_data']
+
+            # Check if name and class elements are present (mandatory)
+            if not all(key in image_dict for key in ['name', 'image_class']):
+                raise ValueError('Name or class not specified in the parameters file.')
+            elif image_dict['name'] is None:
+                raise ValueError('Name is not defined')
+            elif image_dict['image_class'] is None:
+                raise ValueError('class is not defined')
+            else:
+                # Get the image name
+                image_name = image_dict['name']
+                # Check if the image already exists
+                if ImageManager.is_image(image_name):
+                    raise ValueError('Image with the same name already exists, cannot use this name.')
+
+                # Get image class
+                image_class = image_dict['image_class']
+
+                # Import the image class from the image_class name
+                image_class = ImageManager.get_class(image_class)
+
+                # Create a new image with the image class and the parameters
+                image_class.create_image_from_parameters(image_dict)
+
+        except FileNotFoundError:
+            raise FileNotFoundError('Error loading image_data file for image ' + parameters_file)
 
     #####################
     # CLI reserved part #
@@ -458,7 +519,7 @@ class ImageManager:
         module_names = [module.replace('_module.py', '') for module in modules if 'base' not in module and 'module' in module]
 
         # Select desired image type in the list
-        printc('[+] Select the module you want to use:\n', Color.BLUE)
+        ask('Select the module you want to use:')
         selected_module_name = select_from_list(module_names)
 
         # Convert image type into it's corresponding module name
@@ -482,7 +543,7 @@ class ImageManager:
 
             # If there are images
             if images_names_list:
-                printc('[+] Select the image:\n', Color.BLUE)
+                ask('Select the image:')
                 # Allow the user to select an image name from the list
                 return select_from_list(images_names_list)
 
@@ -499,6 +560,7 @@ class ImageManager:
             # For each image name
             for image_name in image_names:
 
+                print('')
                 # Get the status of image
                 image_status = ImageManager.get_image_status(image_name)
 
@@ -515,11 +577,141 @@ class ImageManager:
                 elif image_status == ImageManager.ImageStatus.CORRUPTED:
                     printc('   [CORRUPTED]', Color.RED)
                     print(' • Image name: ' + image_name)
-
-                print('')
+            ok()
 
         else:
             raise UserWarning('No images.')
+
+    @staticmethod
+    def cli_clone_image():
+        """Ask the user for cloning an image"""
+
+        # Get the image to clone
+        image_to_clone = ImageManager.get_created_image(ImageManager.cli_select_created_image())
+
+        ask('Enter the clone name:')
+        while True:
+
+            # Ask the user for a clone name
+            clone_name = input('-->: ').replace(" ", "")
+
+            if clone_name == '':
+                inform('Image name cannot be empty !')
+
+            if ImageManager.is_image(clone_name):
+                inform('Cannot clone into an existing image')
+
+            else:
+                break
+
+        # Get confirmation from user
+        ask('Confirm that you want to clone image \'' + image_to_clone.name + '\' into \'' + clone_name + '\' (yes/no)')
+
+        while True:
+            confirmation = input('-->: ').replace(" ", "")
+
+            if confirmation in {'yes', 'y'}:
+                # Clone the image
+                ImageManager.clone_image(image_to_clone, clone_name)
+                ok('Image cloned')
+                return
+
+            elif confirmation in {'no', 'n'}:
+                inform('Image cloning cancelled')
+                return
+
+            else:
+                inform('\'' + confirmation + '\' is not a valid entry. Please enter another value.')
+
+    @staticmethod
+    def cli_create_image_from_parameters():
+        """Ask the user for crating a new image from a parameters file"""
+
+        # Get the path to the parameters file
+        ask('Enter the path to the parameters file')
+        while True:
+            parameters_file = input('-->: ')
+
+            # If path not correct
+            if parameters_file != '' and not os.path.exists(parameters_file):
+                inform('Parameter file not found ' + parameters_file + ' , please enter another value.')
+
+            # If nothing given by the user
+            elif parameters_file == '':
+                inform('Parameters file path cannot be empty')
+
+            else:
+                try:
+                    # Try to create a new image with the parameters file
+                    ImageManager.create_image_from_parameters(parameters_file)
+                    break
+                except Exception as e:
+                    inform(str(e))
+
+    @staticmethod
+    def cli_clear_image():
+        """Ask user for cleaning an image"""
+        # Get list of existing images
+        images_names = ImageManager.get_image_names()
+
+        # If there is no images, raise an exception
+        if not images_names:
+            raise UserWarning('No images.')
+
+        # Don't get in creation images
+        image_names = [image_name for image_name in images_names if ImageManager.get_image_status(image_name) != ImageManager.ImageStatus.IN_CREATION]
+
+        if image_names:
+            # If there is images, select the image
+            image_name = select_from_list(image_names)
+
+        else:
+            inform('No images.')
+            return
+
+        warn('⚠ Clear image \'' + image_name + '\'. Are you sure (yes/no) ?')
+
+        while True:
+            # get confirmation from user
+            confirmation = input('-->: ').replace(" ", "")
+
+            if confirmation in {'yes', 'y'}:
+                # Clean selected image
+                ImageManager.clean_installation(image_name)
+                ok('Image cleaned')
+                return
+
+            elif confirmation in {'no', 'n'}:
+                inform('Image cleaning cancelled')
+                return
+
+            else:
+                inform('\'' + confirmation + '\' is not a valid entry. Please enter another value.')
+
+    @staticmethod
+    def cli_remove_image():
+        """Ask user for removing an image"""
+        # Get image object to remove
+        image = ImageManager.get_created_image(ImageManager.cli_select_created_image())
+        warn('⚠ Remove image \'' + image.name + '\'. Are you sure (yes/no) ?')
+
+        while True:
+
+            # get confirmation from user
+            confirmation = input('-->: ').replace(" ", "")
+
+            if confirmation in {'yes', 'y'}:
+                # Remove image
+                ImageManager.remove_image(image)
+                ok('Image deleted')
+                return
+
+            elif confirmation in {'no', 'n'}:
+                inform('Image deletion cancelled')
+                return
+
+            else:
+                inform('\'' + confirmation + '\' is not a valid entry. Please enter another value.')
 
 
 # Add the modules directory path to importation path
