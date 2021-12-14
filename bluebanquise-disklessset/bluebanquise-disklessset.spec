@@ -36,50 +36,23 @@ mv $RPM_BUILD_ROOT/%{python3_sitelib}/diskless/*_module.py $RPM_BUILD_ROOT/%{pyt
 
 mkdir -p $RPM_BUILD_ROOT/usr/bin/
 cp disklessset $RPM_BUILD_ROOT/usr/bin/disklessset
-
-# create /etc/disklessset/diskless_parameters.yml with default values
-mkdir -p $RPM_BUILD_ROOT/etc/disklessset
-cat > $RPM_BUILD_ROOT/etc/disklessset/diskless_parameters.yml << EOF
-modules_path: '%{python3_sitelib}/diskless/modules'
-images_directory: '/var/www/html/preboot_execution_environment/diskless/images'
-EOF
-
-# create empty /var/lib/diskless/installations.yml
-mkdir -p $RPM_BUILD_ROOT/var/lib/diskless
-touch $RPM_BUILD_ROOT/var/lib/diskless/installations.yml
-# Add dictionary format to the file
-echo "{}" > $RPM_BUILD_ROOT/var/lib/diskless/installations.yml
-
-# Create base directories for images
-mkdir -p $RPM_BUILD_ROOT/var/www/html/preboot_execution_environment/diskless/{images,kernels}
-
-# Create additional directories for images
-mkdir -p $RPM_BUILD_ROOT/diskless/images/nfsimages/{golden,staging}
-
-# Create working directory for images
-mkdir -p $RPM_BUILD_ROOT/var/tmp/diskless/workdir
+rm -f $RPM_BUILD_ROOT/usr/bin/bluebanquise-disklessset
+ln -s /usr/bin/disklessset $RPM_BUILD_ROOT/usr/bin/bluebanquise-disklessset
 
 %files
 %defattr(-,root,root,-)
 %attr(0755,root,root) /usr/bin/disklessset
+/usr/bin/bluebanquise-disklessset
 %{python3_sitelib}/diskless/*
-/etc/disklessset/diskless_parameters.yml
-/var/lib/diskless/installations.yml
-
-%dir /var/www/html/preboot_execution_environment/diskless/{,images,kernels}
-
-%dir /diskless
-%dir /diskless/images
-%dir /diskless/images/nfsimages/{,golden,staging}
-
-%dir /var/tmp/diskless/workdir
 
 %changelog
 
 * Mon Dec 13 2021 Benoit Leveugle <benoit.leveugle@gmail.com>
 - Rename
+- Remove Ansible dedicated part
+- Add symbolic link
 
-* Mon Oct 22 2021 David Pieters <davidpieters22@gmail.com>
+* Mon Oct 18 2021 David Pieters <davidpieters22@gmail.com>
 - Diskless tool v1.3.0 update, it includes:
 - Add clone system.
 - Add create image from parameters file system.
