@@ -1,11 +1,11 @@
-Name:     disklessset
-Summary:  disklessset
-Release:  2%{?dist}
+Name:     bluebanquise-disklessset
+Summary:  bluebanquise-disklessset
+Release:  1%{?dist}
 Version:  %{_software_version}
 License:  MIT
 Group:    System Environment/Base
 URL:      https://github.com/bluebanquise/
-Source:   https://bluebanquise.com/sources/disklessset-%{_software_version}.tar.gz
+Source:   https://bluebanquise.com/sources/bluebanquise-disklessset-%{_software_version}.tar.gz
 Packager: Benoit Leveugle <benoit.leveugle@gmail.com>
 
 %define debug_package %{nil}
@@ -75,6 +75,10 @@ mkdir -p $RPM_BUILD_ROOT/var/tmp/diskless/workdir
 %dir /var/tmp/diskless/workdir
 
 %changelog
+
+* Mon Dec 13 2021 Benoit Leveugle <benoit.leveugle@gmail.com>
+- Rename
+
 * Mon Oct 22 2021 David Pieters <davidpieters22@gmail.com>
 - Diskless tool v1.3.0 update, it includes:
 - Add clone system.
