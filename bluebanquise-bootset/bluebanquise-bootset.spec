@@ -1,11 +1,11 @@
-Name:     bootset
-Summary:  bootset
+Name:     bluebanquise-bootset
+Summary:  bluebanquise-bootset
 Release:  1%{?dist}
 Version:  %{_software_version}
 License:  MIT
 Group:    System Environment/Base
 URL:      https://github.com/bluebanquise/
-Source:   https://bluebanquise.com/sources/bootset-%{_software_version}.tar.gz
+Source:   https://bluebanquise.com/sources/bluebanquise-bootset-%{_software_version}.tar.gz
 Packager: Benoit Leveugle <benoit.leveugle@gmail.com>
 
 %define debug_package %{nil}
@@ -28,6 +28,9 @@ cp bootset $RPM_BUILD_ROOT/usr/bin/bootset
 /usr/bin/bootset
 
 %changelog
+
+* Mon Dec 13 2021 Benoit Leveugle <benoit.leveugle@gmail.com>
+- Rename
 
 * Mon May 31 2021 Benoit Leveugle <benoit.leveugle@gmail.com>
 - Create
