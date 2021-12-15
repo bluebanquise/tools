@@ -9,6 +9,7 @@ Source:   https://bluebanquise.com/sources/bluebanquise-filters-%{_software_vers
 Packager: Benoit Leveugle <benoit.leveugle@gmail.com>
 
 %define debug_package %{nil}
+%global __os_install_post %(echo '%{__os_install_post}' | sed -e 's!/usr/lib[^[:space:]]*/brp-python-bytecompile[[:space:]].*$!!g')
 
 Requires: python3-clustershell
 
