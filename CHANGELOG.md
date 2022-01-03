@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.0.0 - Next-release
+## 1.5.0
+
+  - Fix: bluebanquise-filters - Clustershell package (#14)
+
+## 1.0.0
 
   - Fix: livenet optimization breaking image builds (#7)
   - Fix: update disklessset.spec with required dependencies and paths (#5)
