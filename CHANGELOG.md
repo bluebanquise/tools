@@ -3,6 +3,7 @@
 ## 1.5.0
 
   - Fix: bluebanquise-filters - Clustershell package (#14)
+  - Fix: Improve yaml loader. (#15)
 
 ## 1.0.0
 
