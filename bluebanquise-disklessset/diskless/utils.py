@@ -28,19 +28,11 @@ def load_file(filename):
 
     logging.debug('Loading file ' + filename)
 
-    # Select YAML loader (needs PyYAML 5.1+ to be safe)
-    yaml_version_major=int(yaml.__version__.split('.')[0])
-    yaml_version_minor=int(yaml.__version__.split('.')[1])
-    if yaml_version_major > 5 or (yaml_version_major == 5 and yaml_version_minor >= 1):
-        yaml_loader='Safe'
-    else:
-        yaml_loader='Unsafe'
-
     with open(filename, 'r') as f:
-        if yaml_loader == 'Safe':
+        # Select YAML loader (needs PyYAML 5.1+ to be safe)
+        if int(yaml.__version__.split('.')[0]) > 5 or (int(yaml.__version__.split('.')[0]) == 5 and int(yaml.__version__.split('.')[1]) >= 1):
             return yaml.load(f, Loader=yaml.FullLoader)
-        else:
-            return yaml.load(f)
+        return yaml.load(f)
 
 
 class Color():
