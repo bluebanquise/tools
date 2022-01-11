@@ -17,7 +17,6 @@
 
 import yaml
 import logging
-from packaging import version
 
 
 def load_file(filename):
@@ -28,11 +27,12 @@ def load_file(filename):
     """
 
     logging.debug('Loading file ' + filename)
+
     with open(filename, 'r') as f:
-        if version.parse(yaml.__version__) < version.parse("5.1.0"):
-            return yaml.load(f)
-        else:
+        # Select YAML loader (needs PyYAML 5.1+ to be safe)
+        if int(yaml.__version__.split('.')[0]) > 5 or (int(yaml.__version__.split('.')[0]) == 5 and int(yaml.__version__.split('.')[1]) >= 1):
             return yaml.load(f, Loader=yaml.FullLoader)
+        return yaml.load(f)
 
 
 class Color():
