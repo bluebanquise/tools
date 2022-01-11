@@ -2,6 +2,7 @@
 
 ## 1.5.0
 
+  - Stop tool if cannot umount image (#16)
   - Fix: bluebanquise-filters - Clustershell package (#14)
 
 ## 1.0.0
