@@ -740,7 +740,7 @@ def cli_menu():
     printc('\n == Livenet image module == ', Color.GREEN)
 
     ask_module('Select an action:')
-    action_list = ['Generate a new livenet image', 'Mount an existing livenet image', 'Umount an existing livenet image', 'Resize livenet image']
+    action_list = ['Generate a new livenet image', 'Mount an existing livenet image', 'Unmount an existing livenet image', 'Resize livenet image']
 
     while True:
         action = select_from_list(action_list)
@@ -751,7 +751,7 @@ def cli_menu():
                 cli_create_livenet_image_questions()
             elif action == 'Mount an existing livenet image':
                 cli_mount_livenet_image()
-            elif action == 'Umount an existing livenet image':
+            elif action == 'Unmount an existing livenet image':
                 cli_unmount_livenet_image()
             else:
                 cli_resize_livenet_image()
