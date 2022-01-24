@@ -2,6 +2,7 @@
 
 ## 1.5.0
 
+  - Fix: bootset - Remove packaging from dependencies (#17)
   - Stop tool if cannot umount image (#16)
   - Fix: bluebanquise-filters - Clustershell package (#14)
   - Fix: Improve yaml loader. (#15)
