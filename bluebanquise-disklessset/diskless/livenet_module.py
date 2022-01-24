@@ -449,10 +449,14 @@ class LivenetImage(Image):
         os.system('umount ' + self.MOUNT_DIRECTORY + '{proc,sys}')
 
         logging.debug('Executing \'umount ' + self.MOUNT_DIRECTORY + '\'')
-        os.system('umount ' + self.MOUNT_DIRECTORY)
+        umount_error_code = os.system('umount ' + self.MOUNT_DIRECTORY)
 
-        logging.debug('Executing \'rm -rf ' + self.MOUNT_DIRECTORY + '\'')
-        shutil.rmtree(self.MOUNT_DIRECTORY)
+        if umount_error_code == 0:
+            logging.debug('Executing \'rm -rf ' + self.MOUNT_DIRECTORY + '\'')
+            shutil.rmtree(self.MOUNT_DIRECTORY)
+        else:
+            logging.error('Could not umount ' + self.MOUNT_DIRECTORY + '. Please ensure no process is using this path.')
+            quit()
 
         # Create a squashfs backup (prevent failure)
         logging.debug('Executing \'mv ' + self.IMAGE_DIRECTORY + 'squashfs.img ' + self.IMAGE_DIRECTORY + 'squashfs.img.bkp\'')
@@ -736,7 +740,7 @@ def cli_menu():
     printc('\n == Livenet image module == ', Color.GREEN)
 
     ask_module('Select an action:')
-    action_list = ['Generate a new livenet image', 'Mount an existing livenet image', 'Unount an existing livenet image', 'Resize livenet image']
+    action_list = ['Generate a new livenet image', 'Mount an existing livenet image', 'Unmount an existing livenet image', 'Resize livenet image']
 
     while True:
         action = select_from_list(action_list)
@@ -747,7 +751,7 @@ def cli_menu():
                 cli_create_livenet_image_questions()
             elif action == 'Mount an existing livenet image':
                 cli_mount_livenet_image()
-            elif action == 'Unount an existing livenet image':
+            elif action == 'Unmount an existing livenet image':
                 cli_unmount_livenet_image()
             else:
                 cli_resize_livenet_image()
