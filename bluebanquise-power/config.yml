@@ -1,0 +1,3 @@
+plugins_path: plugins
+plugins_list:
+  - redfish

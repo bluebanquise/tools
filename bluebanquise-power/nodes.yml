@@ -1,0 +1,10 @@
+c001:
+  power_protocol: redfish
+  protocol_arguments:
+    user: root
+    password: pass
+c002:
+  power_protocol: redfish
+  protocol_arguments:
+    user: root
+    password: pass
