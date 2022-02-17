@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0
+
+  - Feat: Add custom htdocs_path for bootset (#18)
+
 ## 1.5.0
 
   - Fix: bootset - Remove packaging from dependencies (#17)
