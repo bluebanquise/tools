@@ -156,6 +156,12 @@ class ImageManager:
             # Use the constructor of the image class to create fresh image object by it's name
             image = image_class(image_name)
 
+            # Checks if image is really mounted as per is_mounted = True
+            if image.is_mounted:
+                if not os.path.ismount(image.MOUNT_DIRECTORY):
+                    image.is_mounted = False
+                    image.register_image()
+
             # Return constructed image object
             return image
 
