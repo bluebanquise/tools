@@ -3,6 +3,7 @@
 ## 1.6.0
 
   - Feat: Add custom htdocs_path for bootset (#18)
+  - Fix: disklessset check if image is mounted (#19)
 
 ## 1.5.0
 

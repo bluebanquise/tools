@@ -10,6 +10,7 @@
 # disklessset script:
 #    This python script allows to create and manage diskless
 #    images from a linux command line interface.
+# 1.3.7: Improved disklessset checks. Thiago Cardozo <thiago_cardozo@yahoo.com.br>
 # 1.3.6: Fix permissions. Benoit Leveugle <benoit.leveugle@gmail.com>
 # 1.3.5: Stop tool if cannot umount image. Benoit Leveugle <benoit.leveugle@gmail.com>
 # 1.3.4: Removed dependency exclusions that break image builds. Thiago Cardozo <thiago_cardozo@yahoo.com.br>
