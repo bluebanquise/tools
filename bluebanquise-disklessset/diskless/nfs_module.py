@@ -50,7 +50,7 @@ class NfsStagingImage(Image):
             raise ValueError('Invalid password format parameter value')
         self.password = password
 
-        if kernel not in KernelManager.get_available_kernels():
+        if KernelManager.get_available_kernels() is None or kernel not in KernelManager.get_available_kernels():
             raise ValueError('Invalid kernel parameter value')
         self.kernel = kernel
         self.image = 'initramfs-kernel-' + self.kernel.replace('vmlinuz-', '')
