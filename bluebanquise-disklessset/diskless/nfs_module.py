@@ -41,6 +41,7 @@ class NfsStagingImage(Image):
     # Class constructor
     def __init__(self, name, password=None, kernel=None, additional_packages=None, release_version=None):
         super().__init__(name, password, kernel, additional_packages, release_version)
+        self.is_mounted=False
 
     # Create new staging image
     def create_new_image(self, password, kernel, additional_packages, release_version):
@@ -254,6 +255,7 @@ class NfsGoldenImage(Image):
     # Class constructor
     def __init__(self, name, staging_image=None):
         super().__init__(name, staging_image)
+        self.is_mounted=False
 
     # Create new golden image
     def create_new_image(self, staging_image):
