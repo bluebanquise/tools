@@ -36,6 +36,7 @@ from diskless.utils import Color, printc, inform, ask
 # from diskless.image_manager import ImageManager
 
 from diskless.bootstrappers import bootstrappers_main_menu
+from diskless.images_manager import images_manager_main_menu
 
 # Main program
 if __name__ == "__main__":
@@ -106,6 +107,9 @@ if __name__ == "__main__":
 
             # Now that user has made a choice, we are not longer in the main menu
             in_main_menu = False
+
+            if main_action == '1':
+                images_manager_main_menu()
 
             if main_action == '2':
                 bootstrappers_main_menu()
