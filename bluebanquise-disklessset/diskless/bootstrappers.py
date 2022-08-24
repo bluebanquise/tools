@@ -28,16 +28,16 @@ def bootstrappers_main_menu():
     main_action = input('-->: ')
 
     if main_action == '2':
-        print('Please set path to tar.xz file:')
+        print('Please set path to tar.gz file:')
         b_image_path = input('-->: ')
         print('Opening file ' + b_image_path + ' ...')
 
         try:
-            stdout, stderr = subprocess.Popen("tar -C /dev/shm -xOJf " + b_image_path + " bluebanquise_image_metadata.yml", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()
+            stdout, stderr = subprocess.Popen("tar -C /dev/shm -xOzf " + b_image_path + " bluebanquise_image_metadata.yml", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()
             image_meta_data = yaml.safe_load(stdout)
             print("Loading image with following meta data: " + str(image_meta_data))
             os.mkdir("/var/lib/bluebanquise-diskless/bootstrapper_images/" + image_meta_data['image_name'])
-            shutil.copy2(b_image_path, "/var/lib/bluebanquise-diskless/bootstrapper_images/" + image_meta_data['image_name'])
+            shutil.copy2(b_image_path, "/var/lib/bluebanquise-diskless/bootstrapper_images/"+image_meta_data['image_name']+"/image.tar.gz")
             dump_yaml("/var/lib/bluebanquise-diskless/bootstrapper_images/"+image_meta_data['image_name']+"/bluebanquise_image_metadata.yml", image_meta_data)
 
         except OSError as e:

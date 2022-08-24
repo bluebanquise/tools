@@ -44,8 +44,54 @@ def images_manager_main_menu():
                         total += get_dir_size(entry.path)
             return total
 
-        nfs_image_size = get_dir_size("/diskless/" + nfs_image_name)
-        print(nfs_image_size)
+#        nfs_image_size = get_dir_size("/diskless/" + nfs_image_name)
+#        print(nfs_image_size)
+        os.system('rm -Rf /tmp/bluebanquise-diskless-cache/LiveOS')
+        os.system('mkdir -p /tmp/bluebanquise-diskless-cache/LiveOS')
+#        print("size: " + str(int(nfs_image_size)/1000000 + 200))
+#        quit()
+        os.system('dd if=/dev/zero of=/tmp/bluebanquise-diskless-cache/LiveOS/rootfs.img bs=1M count=600')
+        os.system('mkfs.ext4 /tmp/bluebanquise-diskless-cache/LiveOS/rootfs.img')
+        os.system('mkdir -p /diskless_mnt')
+        os.system('mount /tmp/bluebanquise-diskless-cache/LiveOS/rootfs.img /diskless_mnt')
+        os.system('cp -a /diskless/'+nfs_image_name+'/* /diskless_mnt/')
+        os.system('umount /diskless_mnt')
+        os.mkdir("/var/www/html/pxe/diskless/" + image_name)
+        os.system('mksquashfs /tmp/bluebanquise-diskless-cache /var/www/html/pxe/diskless/' + image_name + "/squashfs.img")
+
+        image_meta_data = load_yaml("/diskless/"+nfs_image_name+"/bluebanquise_image_metadata.yml")
+        os.system("cp /var/www/html/pxe/diskless/"+nfs_image_name+"/"+image_meta_data['kernel']+" /var/www/html/pxe/diskless/" + image_name)
+        os.system("cp /var/www/html/pxe/diskless/"+nfs_image_name+"/"+image_meta_data['initramfs']+" /var/www/html/pxe/diskless/" + image_name)
+
+
+        boot_file_content = '''#!ipxe
+echo |
+echo | Entering diskless/{image_name}/boot.ipxe
+echo |
+set image-kernel {image_kernel}
+set image-initramfs {image_initramfs}
+echo | Now starting livenet diskless boot.
+echo |
+echo | Parameters used:
+echo | > Image target: {image_name}
+echo | > Console: ${{eq-console}}
+echo | > Additional kernel parameters: ${{eq-kernel-parameters}} ${{dedicated-kernel-parameters}}
+echo |
+echo | Loading linux ...
+kernel http://${{next-server}}/pxe/diskless/{image_name}/${{image-kernel}} initrd=${{image-initramfs}} root=live:http://${{next-server}}/pxe/diskless/{image_name}/squashfs.img rw ${{eq-console}} ${{eq-kernel-parameters}} ${{dedicated-kernel-parameters}} rd.net.timeout.carrier=30 rd.net.timeout.ifup=60 rd.net.dhcp.retry=4 selinux=0 {image_kernel_parameters}
+echo | Loading initial ramdisk ...
+initrd http://${{next-server}}/pxe/diskless/{image_name}/${{image-initramfs}}
+echo | ALL DONE! We are ready.
+echo | Booting in 4s ...
+echo |
+echo +----------------------------------------------------+
+sleep 4
+boot
+'''.format(image_name=image_name, image_kernel=image_meta_data['kernel'], image_initramfs=image_meta_data['initramfs'], image_kernel_parameters=image_meta_data['kernel_parameters'])
+
+        with open('/var/www/html/pxe/diskless/'+image_name+'/boot.ipxe', "w") as ff:
+            ff.write(boot_file_content)
+        os.system('rm -Rf /tmp/bluebanquise-diskless-cache')
 
     if main_action == '1':
         print("Please select bootstrapper image to be used as source:")
@@ -60,7 +106,7 @@ def images_manager_main_menu():
         image_meta_data = load_yaml("/var/lib/bluebanquise-diskless/bootstrapper_images/" + bimage_name + "/bluebanquise_image_metadata.yml")
         os.mkdir("/diskless/" + image_name)
         os.mkdir("/var/www/html/pxe/diskless/" + image_name)
-        os.system("tar -xJf /var/lib/bluebanquise-diskless/bootstrapper_images/" + bimage_name + "/image.tar.xz -C /diskless/" + image_name)
+        os.system("tar -xzf /var/lib/bluebanquise-diskless/bootstrapper_images/" + bimage_name + "/image.tar.gz -C /diskless/" + image_name)
         os.system("cp /diskless/"+image_name+"/boot/"+image_meta_data['kernel']+" /var/www/html/pxe/diskless/" + image_name)
         os.system("cp /diskless/"+image_name+"/boot/"+image_meta_data['initramfs']+" /var/www/html/pxe/diskless/" + image_name)
    
@@ -80,7 +126,7 @@ echo |
 echo | Loading linux ...
 kernel http://${{next-server}}/pxe/diskless/{image_name}/${{image-kernel}} initrd=${{image-initramfs}} selinux=0 text=1 root=nfs:${{next-server}}:/diskless/{image_name}/,vers=4.2,rw rw ${{eq-console}} ${{eq-kernel-parameters}} ${{dedicated-kernel-parameters}} rd.net.timeout.carrier=30 rd.net.timeout.ifup=60 rd.net.dhcp.retry=4 {image_kernel_parameters}
 echo | Loading initial ramdisk ...
-initrd http://${{next-server}}/preboot_execution_environment/diskless/kernels/${{image-initramfs}}
+initrd http://${{next-server}}/pxe/diskless/{image_name}/${{image-initramfs}}
 echo | ALL DONE! We are ready.
 echo | Booting in 4s ...
 echo |
