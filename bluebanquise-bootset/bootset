@@ -70,7 +70,7 @@ parser.add_argument("-n", "--nodes", dest="nodes",
 parser.add_argument("-s", "--status", dest="status", nargs='?', const='',
                     help="Display current nodes boot target status.")
 parser.add_argument("-b", "--boot", dest="boot",
-                    help="Next pxe boot: can be osdeploy, diskless, clone, clonedeploy, or disk.")
+                    help="Next pxe boot: can be osdeploy, diskless, next, clone, clonedeploy, or disk.")
 parser.add_argument("-f", "--force", dest="force", default=" ",
                     help="Force. 'dhcp' = better dracut dhcp, 'network' = static ip. Combine using comma separator.")
 parser.add_argument("-i", "--image", dest="image", default="none",
@@ -155,7 +155,7 @@ if passed_arguments.status is not None:
 elif passed_arguments.boot is not None:
 
     # Ensure passed boot argument exists
-    if passed_arguments.boot is not None and 'osdeploy' not in passed_arguments.boot and 'diskless' not in passed_arguments.boot and 'clone' not in passed_arguments.boot and 'clonedeploy' not in passed_arguments.boot and 'disk' not in passed_arguments.boot:
+    if passed_arguments.boot is not None and 'osdeploy' not in passed_arguments.boot and 'diskless' not in passed_arguments.boot and 'clone' not in passed_arguments.boot and 'clonedeploy' not in passed_arguments.boot and 'disk' not in passed_arguments.boot and 'next' not in passed_arguments.boot:
         logging.error(bcolors.FAIL+'Passed argument "'+passed_arguments.boot+'" for boot not know. Please check syntax.'+bcolors.ENDC)
         quit()
 
