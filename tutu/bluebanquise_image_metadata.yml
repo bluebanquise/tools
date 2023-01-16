@@ -1,0 +1,10 @@
+os_family: redhat
+distribution: centos
+distribution_version: 7.6
+distribution_major_version: 7
+image_name: centos_7_6
+kernel_parameters: nomodeset
+description: |
+  A Simple CentOS 7 image
+kernel: vmlinuz
+initramfs: initrd
